@@ -4,29 +4,36 @@ Guidance for Claude Code sessions working in this repository.
 
 ## What this is
 
-RepOS is a sales rep operating system for a Lexington Home Brands territory rep
-(TX / OK / AR / LA). It holds account, prospect, pricing, and visit data as
-Markdown, plus scripts that produce reports and drafts from that data.
+RepOS is a read-only operating shell over one or more Pathfinder instances
+(`Bronsonp2013/reptech-pathfinder`), one per venture. It reads each venture's
+database with a `SELECT`-only role and renders a single Today page. It never
+writes to any source. Spec: `docs/REPOS_V1.md`.
+
+## Hard rules
+
+- **No writable credential, ever.** RepOS holds only `repos_reader`
+  connection strings. If a task appears to need a write, stop and raise it;
+  the answer is a Pathfinder-side change or a parked reentry point.
+- **Pathfinder is never modified from this repo.** Read it for schema and
+  conventions. Changes to it are a separate session in that repo.
+- **Schema coupling is declared.** The Pathfinder migration RepOS was built
+  against is recorded in `packages/sources` and checked on boot. Bump it in
+  the same commit that adapts the queries.
+- **One module per Today block.** Queries against Pathfinder tables live in
+  `apps/api/src/blocks/<block>.ts`, nowhere else, so a schema change lands in
+  one place.
+- **Secrets in `.env`, never in `sources.json`.** `sources.json` is committed
+  and holds slugs, names, kinds, and web URLs only.
 
 ## Conventions
 
-- **Records are Markdown with YAML front matter.** See `docs/DATA_MODEL.md` for
-  the required fields per record type. Do not invent new fields without adding
-  them to the data model doc.
-- **File naming.** Lowercase, hyphenated slugs. Accounts: `data/accounts/<state>/<slug>.md`.
-  Prospects: `data/prospects/<metro-slug>/<slug>.md`. Pricing:
-  `data/pricing/<brand>-<category>-<tier>.md`.
-- **Never blend pricing tiers.** One file per source price list and tier.
-- **Never overwrite a record wholesale.** Update fields and append to the
-  `## Log` section. History matters for a rep.
-- **Derived outputs** (xlsx, pdf, csv exports) go in `out/` and are gitignored.
-  Commit the Markdown source, not the export.
-- **Secrets** (API keys, Badger or Google credentials) never go in the repo.
-  Use environment variables and document them in `docs/ENVIRONMENT.md` when added.
+Match Pathfinder's: Node 22, TypeScript strict, npm workspaces, Express,
+React + Vite, Tailwind, TanStack Query for server state, `useState` for local,
+no other state library. ESLint and Prettier configs are copied from
+Pathfinder, not reinvented.
 
 ## Working style
 
-- Prefer small, reviewable commits with descriptive messages.
-- Scripts live in `scripts/` and must be runnable from the repo root.
-- When adding a script, add a one-line entry to the table in `scripts/README.md`.
-- Keep `README.md` status line current when a phase completes.
+- Spec before code. A change to behavior updates `docs/REPOS_V1.md` first.
+- Small, verified commits with real terminal output in the chat.
+- Keep the `## Status` line in `README.md` current.

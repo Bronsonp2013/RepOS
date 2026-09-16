@@ -1,16 +1,19 @@
-# Derived outputs
-out/
-*.xlsx
-*.pdf
-*.csv
-!data/**/*.csv
-
 # Secrets and local config
 .env
 .env.*
-*.local
-credentials*.json
-token*.json
+!.env.example
+sources.local.json
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Test and tooling output
+coverage/
+playwright-report/
+test-results/
 
 # OS and editor
 .DS_Store
@@ -18,17 +21,3 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
-
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Node
-node_modules/
-dist/
-.next/

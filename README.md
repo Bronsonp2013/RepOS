@@ -1,45 +1,40 @@
 # RepOS
 
-**RepOS** is the operating system for a manufacturer's sales rep. It is the single
-home for everything a territory rep needs to run the book: accounts, prospects,
-price lists, visit history, meeting prep, and the automations that keep them current.
+**RepOS** is the operating system for a rep who runs more than one venture. It
+is one read-only screen over every venture's own
+[Pathfinder](https://github.com/Bronsonp2013/reptech-pathfinder) instance:
+what needs a visit, what trips are coming, where the pipeline stands, how
+coverage is tracking.
 
-The first territory it serves is Lexington Home Brands (Lexington, Artistica,
-Tommy Bahama, Barclay Butera, Sligh) across TX / OK / AR / LA.
+RepOS never writes. Every action happens in the Pathfinder instance that owns
+the data. RepOS deep-links there.
 
-## What lives here
+## Ventures
 
-| Area | Purpose |
-| --- | --- |
-| `data/accounts/` | Active customer master: retailers and designers currently on the book |
-| `data/prospects/` | Net-new targets by metro, with qualification notes and status |
-| `data/pricing/` | Standardized price-lookup files, one file per brand, category and tier |
-| `data/checkins/` | Visit and call logs (Badger exports, normalized) |
-| `data/briefs/` | Pre-visit briefs, showroom prep, and day plans |
-| `scripts/` | Automations: parsers, report builders, sweeps |
-| `docs/` | Roadmap, data model, and conventions |
+| Slug | Kind | Pathfinder instance |
+| --- | --- | --- |
+| `lexington` | territory | Bronson's Lexington Home Brands book, TX / OK / AR / LA |
+| `pathfinder` | venture | Selling Pathfinder itself: reps as prospects, trials, paying seats |
+
+Adding a venture is a new entry in `sources.json` and a read-only database
+role. See `docs/REPOS_V1.md` §3 and §6.
 
 ## Principles
 
-1. **Markdown first.** Every record is a plain-text file that a human can read and
-   a Claude session can search. Spreadsheets and PDFs are derived outputs.
-2. **One source of truth per record.** An account has one file. A price list has
-   one file per tier. Never blend tiers or duplicate accounts.
-3. **Automations write, humans decide.** Scripts produce drafts, rankings, and
-   reports. The rep approves outreach and commitments.
-4. **Territory aware.** Every record carries a metro and state so day planning
-   and sweeps can filter geographically.
+1. **Read-only by construction.** The database role can only `SELECT`, and
+   every connection is a read-only transaction. A bug in RepOS cannot damage
+   a venture's data.
+2. **Physical separation.** Ventures are separate databases, not rows with a
+   tag. Nothing has to check a tag.
+3. **Pathfinder is unchanged.** RepOS adapts to Pathfinder's schema, not the
+   other way around, and says loudly when the schema moves.
 
-## Getting started
+## Documents
 
-```bash
-git clone https://github.com/Bronsonp2013/RepOS.git
-cd RepOS
-```
-
-Read `docs/ROADMAP.md` for the build plan and `docs/DATA_MODEL.md` for record
-formats. Conventions for Claude Code sessions are in `CLAUDE.md`.
+- `docs/REPOS_V1.md` — the V1 spec, decisions, and build order
+- `docs/SESSION_BRIEF_REPOS_V1.md` — how a build session runs
+- `docs/parked/` — the multi-tenant plan this replaced, kept for reentry
 
 ## Status
 
-Phase 0: repository scaffold and conventions. See the roadmap for what comes next.
+Spec committed. No code yet. Next: Session brief Step 0.
