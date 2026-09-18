@@ -14,7 +14,18 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
-  use: { baseURL: webBaseUrl, trace: 'retain-on-failure' },
+  use: {
+    baseURL: webBaseUrl,
+    trace: 'retain-on-failure',
+    // Outbound access to cdn.playwright.dev is blocked by sandbox egress
+    // policy, so the newer browser revision @playwright/test wants cannot be
+    // downloaded. Use the Chromium build already present in the sandbox
+    // image instead of the one browsers.json names.
+    launchOptions: {
+      executablePath:
+        process.env.REPOS_E2E_CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    },
+  },
   webServer: [
     {
       // API against the fixture databases in .env.test (loaded above into

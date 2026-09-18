@@ -29,6 +29,18 @@ role. See `docs/REPOS_V1.md` §3 and §6.
 3. **Pathfinder is unchanged.** RepOS adapts to Pathfinder's schema, not the
    other way around, and says loudly when the schema moves.
 
+## Running
+
+```
+cp .env.example .env   # fill in each REPOS_SOURCE_<SLUG>_DATABASE_URL
+npm install
+npm run dev             # API on :3200, web on :5173, both reading .env
+```
+
+`npm run dev` runs `apps/api` and `apps/web` together. `apps/web`'s Vite dev
+server loads `.env` on its own; `apps/api` loads it explicitly in
+`apps/api/src/index.ts` (tsx does not do this automatically).
+
 ## Documents
 
 - `docs/REPOS_V1.md` — the V1 spec, decisions, and build order
@@ -37,12 +49,11 @@ role. See `docs/REPOS_V1.md` §3 and §6.
 
 ## Status
 
-Spec committed; build in progress under orchestration. Skeleton committed:
-npm-workspaces monorepo (`apps/api`, `apps/web`, `packages/shared`,
-`packages/sources`), API and web contracts, and the test scaffolding for
-acceptance criteria C1-C9. Deploy surface is drafted (`Dockerfile`,
-`docker-compose.yml`, `Caddyfile.example`, `docs/DEPLOY.md`); the API and web
-image have not been built in this environment (no Docker daemon in the
-sandbox). `npm run typecheck` and `npm run lint` pass; every test file
-exists and fails with `not implemented`. Next: the implementation lanes
-(build order B-F in `docs/REPOS_V1.md` §8).
+V1 built and under review. All implementation lanes (sources, blocks, routes,
+web, deploy-docs) have landed and been integrated. `npm run typecheck`,
+`npm run lint`, `npm test`, `npm run build -w apps/web`, and `npm run e2e`
+all pass. `npm run dev` starts the API and web app together against `.env`.
+Deploy surface is drafted (`Dockerfile`, `docker-compose.yml`,
+`Caddyfile.example`, `docs/DEPLOY.md`); the container image has not been
+built in this environment (no Docker daemon in the sandbox). Next: review
+against the acceptance criteria in `.orchestrator/state.md`.

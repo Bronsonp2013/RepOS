@@ -3,9 +3,21 @@
  * source, refuses to start when a source's schema is behind (a warning is
  * logged when a source is ahead instead), then listens.
  */
+import { fileURLToPath } from 'node:url';
+import { resolve, dirname } from 'node:path';
+import dotenv from 'dotenv';
 import { createSourcePools, loadSourceConfigs, MAX_POOL_CONNECTIONS } from '@repos/sources';
 import { createServer } from './server';
 import { errorMessage } from './services/redact';
+
+// Resolved from this file's location, not process.cwd(), so `.env` and
+// `sources.json` (both at the repo root) are found the same way whether the
+// API is started from the repo root (`npm run dev`) or via a workspace
+// script (`npm run start -w apps/api`, which npm runs with apps/api as the
+// cwd). tsx does not load `.env` on its own, unlike Vite for the web app, so
+// this bootstrap does it explicitly (docs/REPOS_V1.md "Running").
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+dotenv.config({ path: resolve(REPO_ROOT, '.env') });
 
 const PORT = Number(process.env.REPOS_API_PORT ?? 3200);
 
@@ -15,7 +27,7 @@ const CONNECTION_TIMEOUT_MS = Number(process.env.REPOS_DB_CONNECT_TIMEOUT_MS ?? 
 const STATEMENT_TIMEOUT_MS = Number(process.env.REPOS_DB_STATEMENT_TIMEOUT_MS ?? 10_000);
 
 export async function main(): Promise<void> {
-  const configs = await loadSourceConfigs();
+  const configs = await loadSourceConfigs({ configPath: resolve(REPO_ROOT, 'sources.json') });
   const factory = await createSourcePools(configs, {
     max: MAX_POOL_CONNECTIONS,
     connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
