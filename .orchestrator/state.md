@@ -33,7 +33,7 @@ the sole input to the phase-7 acceptance worker. All commands run from `/home/us
 
 ## Current phase
 
-`3 — Implementation lanes (staged: sources+deploy-docs, blocks+web, routes) after contract-fix`
+`4 — Integration, then 5 — Adversarial review`
 
 ## Lane map
 
@@ -43,11 +43,11 @@ test/setup/**.
 
 | id | owns | may_read | status |
 |---|---|---|---|
-| sources | `packages/sources/src/{types,config,pool,schema}.ts`, `packages/sources/src/{readonly,schema,credentials}.test.ts` | shared, sources index, fixtures, sources.json | pending |
-| blocks | `apps/api/src/blocks/**` incl. `today-blocks.test.ts` | shared, sources, server.ts, services, fixtures | pending |
-| routes | `apps/api/src/routes/**`, `apps/api/src/services/**`, `apps/api/src/index.ts`, `apps/api/src/{sources,degrade,today}.test.ts` | shared, sources, blocks, server.ts | pending |
-| web | `apps/web/src/**`, `apps/web/{index.html,vite.config.ts,tailwind.config.js,postcss.config.js}`, `e2e/**` | shared, playwright.config.ts | pending |
-| deploy-docs | `Dockerfile`, `docker-compose.yml`, `Caddyfile.example`, `docs/DEPLOY.md`, `README.md` | spec, package.json, .env.example | pending |
+| sources | `packages/sources/src/{types,config,pool,schema}.ts`, `packages/sources/src/{readonly,schema,credentials}.test.ts` | shared, sources index, fixtures, sources.json | done |
+| blocks | `apps/api/src/blocks/**` incl. `today-blocks.test.ts` | shared, sources, server.ts, services, fixtures | done |
+| routes | `apps/api/src/routes/**`, `apps/api/src/services/**`, `apps/api/src/index.ts`, `apps/api/src/{sources,degrade,today}.test.ts` | shared, sources, blocks, server.ts | done |
+| web | `apps/web/src/**`, `apps/web/{index.html,vite.config.ts,tailwind.config.js,postcss.config.js}`, `e2e/**` | shared, playwright.config.ts | done |
+| deploy-docs | `Dockerfile`, `docker-compose.yml`, `Caddyfile.example`, `docs/DEPLOY.md`, `README.md` | spec, package.json, .env.example | done |
 
 ## Tasks
 
@@ -56,12 +56,14 @@ test/setup/**.
 | scout-env | `recon:scout-env` | sonnet | 1 | pass (3 verifications exit 0) |
 | arch | `arch:arch` | opus | 1 | pass (typecheck 0, lint 0, web build 0; tests fail 'not implemented' by design) |
 | review-contracts | `review:contracts` | opus | 1 | fail: 3 blockers, 5 majors, 2 minors (all triaged into contract-fix and lane briefs) |
-| contract-fix | `fix:contracts` | sonnet | 1 | running |
-| lane-sources | `lane:sources` | sonnet | 1 | pending |
-| lane-blocks | `lane:blocks` | sonnet | 1 | pending |
-| lane-routes | `lane:routes` | sonnet | 1 | pending |
-| lane-web | `lane:web` | sonnet | 1 | pending |
-| lane-deploy-docs | `lane:deploy-docs` | sonnet | 1 | pending |
+| contract-fix | `fix:contracts` | sonnet | 1 | pass (3 exits 0, commit 4a7252b) |
+| lane-sources | `lane:sources` | sonnet | 1 | pass (5 exits 0) |
+| lane-blocks | `lane:blocks` | sonnet | 1 | pass (3 exits 0) |
+| lane-routes | `lane:routes` | sonnet | 1 | pass (3 exits 0; full suite 35 tests) |
+| lane-web | `lane:web` | sonnet | 1 | partial: all green except e2e, which ran before routes existed; integrator re-runs |
+| lane-deploy-docs | `lane:deploy-docs` | sonnet | 1 | pass (2 exits 0; image not built, no Docker) |
+| integrate | `integrate` | sonnet | 1 | running |
+| review-correctness / review-criteria / review-security | `review:*` | opus | 1 | queued behind integrate |
 
 ## Open decisions
 
