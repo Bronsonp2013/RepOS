@@ -4,12 +4,43 @@
  * refuses to start naming the gap, ahead warns naming the extras, matching
  * reports `ok` (docs/REPOS_V1.md §2.5, CLAUDE.md hard rules).
  *
+ * A source that connects but has no readable `schema_migrations` is
+ * `unknown` (fatal at boot: it looks like a reachable non-Pathfinder
+ * database). A source that cannot be connected to at all — refused,
+ * timed out, or an auth failure — is `unreachable`, which is a distinct,
+ * non-fatal status: it is Pathfinder-side "down", not a schema mismatch
+ * (docs/REPOS_V1.md decision 5).
+ *
  * Bump EXPECTED_MIGRATION and KNOWN_MIGRATIONS in the same commit that adapts
  * the block queries.
  * Covered by schema.test.ts.
  */
 import type { Pool } from 'pg';
 import type { SchemaCheckResult } from './types';
+
+// Mirrors apps/api/src/services/redact.ts's CREDENTIAL_SHAPED regex. Kept
+// local (rather than imported) because packages/sources must not depend on
+// apps/api; a pg connection error occasionally echoes the connection string
+// it failed to use, and this is the last line of defense against that
+// leaking into a schema-check message (CLAUDE.md: no writable credential,
+// ever).
+const CREDENTIAL_SHAPED = /[a-z][a-z0-9+.-]*:\/\/[^\s]+@[^\s]+/gi;
+
+function redactMessage(message: string): string {
+  return message.replace(CREDENTIAL_SHAPED, '[redacted]');
+}
+
+/**
+ * Postgres error codes that mean "connected fine, but this isn't a readable
+ * Pathfinder schema" — as opposed to a connection-level failure. Currently
+ * just `undefined_table` (no `schema_migrations` relation at all).
+ */
+const SCHEMA_UNREADABLE_CODES = new Set(['42P01']);
+
+function isConnectionLevelFailure(err: unknown): boolean {
+  const code = (err as { code?: unknown }).code;
+  return !(typeof code === 'string' && SCHEMA_UNREADABLE_CODES.has(code));
+}
 
 /** The Pathfinder migration RepOS V1 was built against. */
 export const EXPECTED_MIGRATION = '0029_sessions.sql';
@@ -90,25 +121,46 @@ export function compareMigrations(slug: string, applied: string[]): SchemaCheckR
   };
 }
 
-/** Read `schema_migrations` from a source and classify it. */
+/**
+ * Read `schema_migrations` from a source and classify it. A connection-level
+ * failure (refused, timed out, auth failure — anything that isn't "connected
+ * fine but the table isn't there") is `unreachable`, not `unknown`.
+ */
 export async function checkSourceSchema(slug: string, pool: Pool): Promise<SchemaCheckResult> {
   try {
     const result = await pool.query<{ filename: string }>('SELECT filename FROM schema_migrations ORDER BY filename');
     const applied = result.rows.map((row) => row.filename);
     return compareMigrations(slug, applied);
   } catch (err) {
+    const reason = redactMessage((err as Error).message);
+    if (isConnectionLevelFailure(err)) {
+      return {
+        slug,
+        status: 'unreachable',
+        expectedMigration: EXPECTED_MIGRATION,
+        extraMigrations: [],
+        missingMigrations: [],
+        message: `source "${slug}" is unreachable: ${reason}`,
+      };
+    }
     return {
       slug,
       status: 'unknown',
       expectedMigration: EXPECTED_MIGRATION,
       extraMigrations: [],
       missingMigrations: [],
-      message: `source "${slug}" schema check failed: ${(err as Error).message}`,
+      message: `source "${slug}" schema check failed: ${reason}`,
     };
   }
 }
 
-/** Throws when a source is `behind`, with a message naming the missing migrations. */
+/**
+ * Throws when a source is `behind` or `unknown`, with a message naming the
+ * problem. `unreachable` is deliberately NOT fatal here: a source that is
+ * simply down is a degraded source, not a schema mismatch, so boot proceeds
+ * and the source is marked degraded (apps/api/src/index.ts,
+ * docs/REPOS_V1.md decision 5).
+ */
 export function assertSchemaUsable(result: SchemaCheckResult): void {
   if (result.status === 'behind') {
     throw new Error(result.message ?? `source "${result.slug}" is behind expected schema`);

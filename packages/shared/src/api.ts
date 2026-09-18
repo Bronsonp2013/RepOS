@@ -17,12 +17,17 @@ export type SourceKind = 'territory' | 'venture';
 /**
  * Result of comparing a source's `schema_migrations` against the Pathfinder
  * migration RepOS was built for.
- * - `ok`      — the source has exactly the migrations RepOS expects.
- * - `ahead`   — the source has extra migrations; boot warns and names them.
- * - `behind`  — the source is missing an expected migration; boot refuses.
- * - `unknown` — the check could not run (source unreachable).
+ * - `ok`          — the source has exactly the migrations RepOS expects.
+ * - `ahead`       — the source has extra migrations; boot warns and names them.
+ * - `behind`      — the source is missing an expected migration; boot refuses.
+ * - `unknown`     — the source connected but `schema_migrations` could not be
+ *   read (e.g. not a Pathfinder database); boot refuses.
+ * - `unreachable` — the source could not be connected to at all (refused,
+ *   timed out, auth failure). Boot proceeds with the source marked degraded;
+ *   it is re-checked per request and promoted to live once it answers again
+ *   (docs/REPOS_V1.md decision 5).
  */
-export type SchemaStatus = 'ok' | 'ahead' | 'behind' | 'unknown';
+export type SchemaStatus = 'ok' | 'ahead' | 'behind' | 'unknown' | 'unreachable';
 
 /** `GET /api/sources` — one entry per configured venture. Never a credential. */
 export interface SourceSummary {

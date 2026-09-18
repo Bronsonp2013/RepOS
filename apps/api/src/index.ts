@@ -44,6 +44,13 @@ export async function main(): Promise<void> {
         `[repos-api] ${sourcePool.schema.message ?? `source "${sourcePool.config.slug}" schema is ahead`}`
       );
     }
+    if (sourcePool.schema.status === 'unreachable') {
+      // Not fatal (docs/REPOS_V1.md decision 5): boot proceeds with this
+      // source marked degraded, and it is re-checked per request.
+      console.warn(
+        `[repos-api] ${sourcePool.schema.message ?? `source "${sourcePool.config.slug}" is unreachable`} — booting degraded`
+      );
+    }
   }
 
   const app = createServer(factory);

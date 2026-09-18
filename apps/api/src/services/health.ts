@@ -7,12 +7,14 @@ import type { HealthReport, MeetingTypeSummary, SourceHealth, SourceSummary } fr
 import { EXPECTED_MIGRATION } from '@repos/sources';
 import type { SourcePool, SourcePoolFactory } from '@repos/sources';
 import { errorMessage } from './redact';
+import { ensureSchemaCurrent } from './reachability';
 import { DEFAULT_TIMEZONE, readMeetingTypes, readTimezone } from './sourceContext';
 
 export async function buildSourceSummaries(factory: SourcePoolFactory): Promise<SourceSummary[]> {
   return Promise.all(
     factory.all().map(async (sourcePool): Promise<SourceSummary> => {
-      const { config, schema } = sourcePool;
+      const { config } = sourcePool;
+      const schema = await ensureSchemaCurrent(sourcePool);
       const [timezone, meetingTypes] = await Promise.all([
         readTimezone(sourcePool.pool).catch(() => DEFAULT_TIMEZONE),
         readMeetingTypes(sourcePool.pool).catch(() => [] as MeetingTypeSummary[]),
@@ -34,20 +36,21 @@ export async function buildSourceSummaries(factory: SourcePoolFactory): Promise<
 }
 
 async function probe(sourcePool: SourcePool): Promise<SourceHealth> {
+  const schema = await ensureSchemaCurrent(sourcePool);
   const startedAt = Date.now();
   try {
     await sourcePool.pool.query('SELECT 1');
     return {
       slug: sourcePool.config.slug,
       reachable: true,
-      schemaStatus: sourcePool.schema.status,
+      schemaStatus: schema.status,
       latencyMs: Date.now() - startedAt,
     };
   } catch (err) {
     return {
       slug: sourcePool.config.slug,
       reachable: false,
-      schemaStatus: sourcePool.schema.status,
+      schemaStatus: schema.status,
       latencyMs: null,
       error: errorMessage(err),
     };

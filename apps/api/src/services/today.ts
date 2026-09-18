@@ -9,6 +9,7 @@ import type { SourcePool, SourcePoolFactory } from '@repos/sources';
 import type { BlockContext } from '../blocks';
 import { coverage, needsVisit, pipeline, totals as totalsBlock, upcomingTrips } from '../blocks';
 import { errorMessage } from './redact';
+import { ensureSchemaCurrent, isQueryable } from './reachability';
 import { DEFAULT_TIMEZONE, readTimezone } from './sourceContext';
 
 const EMPTY_TOTALS: SourceTotals = {
@@ -36,8 +37,35 @@ export function resolveNow(): Date {
   return nowOverride ?? new Date();
 }
 
+function degradedSource(config: SourcePool['config'], error: string): TodaySource {
+  return {
+    slug: config.slug,
+    name: config.name,
+    kind: config.kind,
+    webUrl: config.webUrl,
+    timezone: DEFAULT_TIMEZONE,
+    needsVisit: [],
+    upcomingTrips: [],
+    pipeline: [],
+    coverage: [],
+    totals: { ...EMPTY_TOTALS },
+    error,
+  };
+}
+
 async function buildOne(sourcePool: SourcePool, now: Date): Promise<TodaySource> {
   const { config } = sourcePool;
+
+  // A source that booted (or was last seen) unreachable gets one bounded
+  // recheck per request; if it's still not queryable, degrade this entry
+  // without attempting block queries (docs/REPOS_V1.md decision 5, C7).
+  const schema = await ensureSchemaCurrent(sourcePool);
+  if (!isQueryable(schema)) {
+    return degradedSource(
+      config,
+      schema.message ?? `source "${config.slug}" schema status is ${schema.status}`
+    );
+  }
 
   try {
     const timezone = await readTimezone(sourcePool.pool);
@@ -70,19 +98,7 @@ async function buildOne(sourcePool: SourcePool, now: Date): Promise<TodaySource>
       totals: sourceTotals,
     };
   } catch (err) {
-    return {
-      slug: config.slug,
-      name: config.name,
-      kind: config.kind,
-      webUrl: config.webUrl,
-      timezone: DEFAULT_TIMEZONE,
-      needsVisit: [],
-      upcomingTrips: [],
-      pipeline: [],
-      coverage: [],
-      totals: { ...EMPTY_TOTALS },
-      error: errorMessage(err),
-    };
+    return degradedSource(config, errorMessage(err));
   }
 }
 

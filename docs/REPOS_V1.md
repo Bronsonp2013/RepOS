@@ -44,7 +44,11 @@ databases), not logical (a `workspace_id` column).
    `schema_migrations`. A source that is ahead logs a warning naming the newer
    migrations; a source that is behind refuses to start. Queries live in one
    file per source table group so a Pathfinder schema change has one place to
-   land.
+   land. A source that cannot be connected to at all (refused, timed out, auth
+   failure) is `unreachable`, not `unknown`: unlike `behind` or `unknown` (a
+   reachable database whose schema itself doesn't check out), `unreachable` is
+   not fatal at boot — the source boots degraded, is re-checked once per
+   request, and is promoted back to live the moment it answers again.
 6. **Private network only in V1.** RepOS shows the same customer data
    Pathfinder does. It binds to the tailnet, never a public URL. Login is V2.
 
