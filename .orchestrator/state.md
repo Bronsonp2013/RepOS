@@ -33,7 +33,7 @@ the sole input to the phase-7 acceptance worker. All commands run from `/home/us
 
 ## Current phase
 
-`6 — Remediation (round 1 of max 2), then integrate-2, then 7 — Acceptance`
+`6 — Remediation round 2 of 2 (C7 policy fix), then 7 — Acceptance re-run`
 
 ## Lane map
 
@@ -66,9 +66,12 @@ test/setup/**.
 | review-correctness | `review:correctness` | opus | 1 | fail: 2 blockers (web error state unreachable; no pool error listener), 5 majors, 3 minors |
 | review-criteria | `review:criteria` | opus | 1 | pass_with_fixes: all C1-C9 commands exit 0; 5 majors on vacuous tests and an unredacted 500, 5 minors |
 | review-security | `review:security` | opus | 2 (attempt 1 died on schema length) | fail: 2 blockers (CORS *, no .dockerignore), 3 majors (500 handler, listen 0.0.0.0, compose ports), 4 minors |
-| fix-sources / fix-blocks / fix-api / fix-tests / fix-web / fix-deploy | `fix:*` | sonnet | 1 | running (all 28 findings in scope, grouped file-disjoint) |
-| integrate-2 | `integrate-2` | sonnet | 1 | queued |
-| accept | `accept` | opus | 1 | queued |
+| fix-sources / fix-blocks / fix-tests / fix-web / fix-deploy | `fix:*` | sonnet | 1 | pass (all verifications exit 0) |
+| fix-api | `fix:api` | sonnet | 1 | pass except degrade.test.ts, which the integrator then re-scoped |
+| integrate-2 | `integrate-2` | sonnet | 1 | pass on exit codes (commit 55e2a98) but rewrote degrade.test.ts to a post-boot pool kill, which is not C7's scenario |
+| accept | `accept` | opus | 1 | rejected: C1-C6, C8, C9 met with real evidence; C7 unmet because an unreachable source is fatal at boot |
+| fix-unreachable | `fix:unreachable` | sonnet | 1 | running |
+| accept | `accept` | opus | 2 | queued |
 
 ## Open decisions
 
@@ -77,6 +80,7 @@ test/setup/**.
 | D1 | Architect asks: Node 22 vs Pathfinder's 20; placeholder webUrls; API runs under tsx in prod; no Docker to verify image. | Resolved by orchestrator: 22, placeholders stay config, tsx matches Pathfinder, image unverified is a recorded degradation. | resolved |
 | D2 | Review blockers: fixture trip date past; totals block missing; test filter collision. | Fixed clock via BlockContext in tests; totals block added to blocks lane; lane verification commands made path-exact; criteria unchanged. | resolved |
 | D3 | Finding triage (decision 3): all 28 findings from three reviewers are in scope; none deferred. | Six file-disjoint fix groups. | resolved |
+| D4 | Policy: a source that is unreachable at boot must degrade, not fail boot; only behind/unknown (reachable, no readable migrations) is fatal. Spec decision 5 amended to say so. | Orchestrator decided; C7 unchanged. | resolved |
 | D0 | Bronson said "proceed"; treated as run-unattended. Phase 1 and 2 gates become notifications. | — | assumed |
 
 ## Degradations
