@@ -41,6 +41,9 @@ npm run dev             # API on :3200, web on :5173, both reading .env
 server loads `.env` on its own; `apps/api` loads it explicitly in
 `apps/api/src/index.ts` (tsx does not do this automatically).
 
+`npm run e2e` resolves Chromium via `REPOS_E2E_CHROMIUM_PATH` if set, else
+Playwright's own installed default, else the fallback under `/opt/pw-browsers`.
+
 ## Documents
 
 - `docs/REPOS_V1.md` — the V1 spec, decisions, and build order

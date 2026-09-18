@@ -7,7 +7,7 @@ export default function PipelineBlock({ rows }: { rows: PipelineRow[] }) {
     <div data-testid="block-pipeline" className="p-4">
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Pipeline</h3>
       {rows.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-400">No stages configured.</p>
+        <p className="mt-2 text-sm text-slate-600">No stages configured.</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {rows.map((row) => (

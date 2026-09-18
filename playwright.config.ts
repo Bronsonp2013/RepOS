@@ -1,7 +1,48 @@
 import { defineConfig } from '@playwright/test';
+import { chromium } from 'playwright-core';
 import dotenv from 'dotenv';
+import fs from 'node:fs';
+import path from 'node:path';
 
 dotenv.config({ path: '.env.test', override: false });
+
+// Chromium executable resolution, in order:
+//   1. REPOS_E2E_CHROMIUM_PATH, if set (documented in .env.example and README).
+//   2. Playwright's own default revision, if that browser is actually
+//      installed at config-evaluation time (it may not be: the revision
+//      @playwright/test wants can outpace what a prebuilt image carries,
+//      and outbound access to cdn.playwright.dev to fetch it is blocked by
+//      sandbox egress policy).
+//   3. The repo-known fallback location, picking the newest installed
+//      chromium-*/chrome-linux/chrome under it.
+function resolveChromiumExecutable(): string | undefined {
+  if (process.env.REPOS_E2E_CHROMIUM_PATH) {
+    return process.env.REPOS_E2E_CHROMIUM_PATH;
+  }
+  const defaultPath = chromium.executablePath();
+  if (defaultPath && fs.existsSync(defaultPath)) {
+    return undefined; // let Playwright use its own default resolution
+  }
+  const fallbackRoot = '/opt/pw-browsers';
+  if (fs.existsSync(fallbackRoot)) {
+    const candidates = fs
+      .readdirSync(fallbackRoot)
+      .filter((name) => /^chromium-\d+$/.test(name))
+      .map((name) => ({
+        name,
+        rev: Number(name.slice('chromium-'.length)),
+        exe: path.join(fallbackRoot, name, 'chrome-linux', 'chrome'),
+      }))
+      .filter((c) => fs.existsSync(c.exe))
+      .sort((a, b) => b.rev - a.rev);
+    if (candidates.length > 0) {
+      return candidates[0].exe;
+    }
+  }
+  return undefined;
+}
+
+const chromiumExecutablePath = resolveChromiumExecutable();
 
 const apiPort = Number(process.env.REPOS_API_PORT ?? 3200);
 // Distinct from REPOS_WEB_PORT (the `npm run dev` port, 5173 by default) so
@@ -20,15 +61,10 @@ export default defineConfig({
   use: {
     baseURL: webBaseUrl,
     trace: 'retain-on-failure',
-    // Outbound access to cdn.playwright.dev is blocked by sandbox egress
-    // policy, so the newer browser revision @playwright/test wants cannot be
-    // downloaded there; that sandbox sets REPOS_E2E_CHROMIUM_PATH to the
-    // Chromium build already present in the image. Anywhere else (no
-    // override set), fall back to Playwright's own resolution instead of
-    // that sandbox-only path, which would not exist.
-    launchOptions: process.env.REPOS_E2E_CHROMIUM_PATH
-      ? { executablePath: process.env.REPOS_E2E_CHROMIUM_PATH }
-      : {},
+    // See resolveChromiumExecutable() above: REPOS_E2E_CHROMIUM_PATH wins if
+    // set, else Playwright's own installed default, else the repo-known
+    // fallback under /opt/pw-browsers.
+    launchOptions: chromiumExecutablePath ? { executablePath: chromiumExecutablePath } : {},
   },
   webServer: [
     {
