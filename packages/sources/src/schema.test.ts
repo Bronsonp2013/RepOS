@@ -5,12 +5,15 @@
  * 0029_sessions.sql, and another with an unknown extra row.
  * Selected by: npm test -- schema
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Client, Pool } from 'pg';
 import { KNOWN_MIGRATIONS, checkSourceSchema, assertSchemaUsable } from './schema';
+import { createSourcePools } from './pool';
+import type { SourceConfig } from './types';
 
 const DB_MISSING = 'repos_test_schema_missing';
 const DB_AHEAD = 'repos_test_schema_ahead';
+const DB_UNKNOWN = 'repos_test_schema_unknown';
 const EXTRA_MIGRATION = '0030_unknown_future.sql';
 
 function superuserUrl(): string {
@@ -55,11 +58,16 @@ beforeAll(async () => {
 
   await createFixtureDatabase(admin, DB_MISSING, KNOWN_MIGRATIONS.slice(0, -1));
   await createFixtureDatabase(admin, DB_AHEAD, [...KNOWN_MIGRATIONS, EXTRA_MIGRATION]);
+
+  // Throwaway database with no schema_migrations table at all.
+  await dropDatabase(admin, DB_UNKNOWN);
+  await admin.query(`CREATE DATABASE "${DB_UNKNOWN}"`);
 });
 
 afterAll(async () => {
   await dropDatabase(admin, DB_MISSING);
   await dropDatabase(admin, DB_AHEAD);
+  await dropDatabase(admin, DB_UNKNOWN);
   await admin.end();
 });
 
@@ -98,5 +106,45 @@ describe('schema check (C4)', () => {
     } finally {
       await pool.end();
     }
+  });
+
+  it('refuses to boot against a source with no readable schema_migrations table', async () => {
+    const pool = new Pool({ connectionString: withDatabase(superuserUrl(), DB_UNKNOWN) });
+    try {
+      const result = await checkSourceSchema('unreadable-schema', pool);
+      expect(result.status).toBe('unknown');
+      expect(() => assertSchemaUsable(result)).toThrow(/schema_migrations/);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('rejects createSourcePools for a behind database and closes any pools it opened', async () => {
+    const okConfig: SourceConfig = {
+      slug: 'lexington',
+      name: 'Lexington',
+      kind: 'venture',
+      webUrl: 'https://example.test',
+      databaseUrl: process.env.REPOS_SOURCE_LEXINGTON_DATABASE_URL!,
+      envVar: 'REPOS_SOURCE_LEXINGTON_DATABASE_URL',
+    };
+    expect(okConfig.databaseUrl).toBeTruthy();
+
+    const behindConfig: SourceConfig = {
+      slug: 'missing-migration',
+      name: 'Missing Migration',
+      kind: 'venture',
+      webUrl: 'https://example.test',
+      databaseUrl: withDatabase(superuserUrl(), DB_MISSING),
+      envVar: 'REPOS_TEST_SUPERUSER_DATABASE_URL',
+    };
+
+    const endSpy = vi.spyOn(Pool.prototype, 'end');
+
+    await expect(createSourcePools([okConfig, behindConfig])).rejects.toThrow(/0029_sessions\.sql/);
+
+    // The one pool opened before the rejection (for okConfig) must have been closed.
+    expect(endSpy).toHaveBeenCalledTimes(1);
+    endSpy.mockRestore();
   });
 });

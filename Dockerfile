@@ -15,9 +15,11 @@
 #      switch its `command` to `web` (see compose comments) to use this mode.
 FROM node:22-slim AS base
 WORKDIR /app
-ENV NODE_ENV=production
 
 # --- deps: install once, reused by both the build and the runtime layers ---
+# NODE_ENV is intentionally NOT set to production here: npm ci must install
+# devDependencies (tsx, vite, typescript) because the build stage type-checks
+# and builds with them, and the runtime stage runs the API with tsx.
 FROM base AS deps
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/package.json
@@ -34,10 +36,12 @@ RUN npm run build -w apps/web
 # --- runtime: everything needed to run the API with tsx, plus the built
 #     web bundle for the optional `vite preview` mode ---
 FROM base AS runtime
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package.json ./package.json
-COPY . .
-COPY --from=build /app/apps/web/dist ./apps/web/dist
+ENV NODE_ENV=production
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=deps --chown=node:node /app/package.json ./package.json
+COPY --chown=node:node . .
+COPY --from=build --chown=node:node /app/apps/web/dist ./apps/web/dist
+USER node
 
 EXPOSE 3200
 EXPOSE 5173

@@ -38,8 +38,11 @@ export interface SourceSummary {
   missingMigrations: string[];
   /** IANA zone from `users.timezone` for user 1, e.g. `America/Chicago`. */
   timezone: string;
-  /** Distinct `meeting_types.key` values configured in this instance. */
-  meetingTypes: string[];
+  /**
+   * `meeting_types` rows configured in this instance, seeded and rep-created
+   * alike. See `MeetingTypeSummary` for the null semantics of `key`.
+   */
+  meetingTypes: MeetingTypeSummary[];
 }
 
 /** One source's live connectivity, as reported by `GET /api/health`. */

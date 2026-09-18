@@ -1,0 +1,11 @@
+.env
+.env.*
+node_modules
+**/node_modules
+.git
+.orchestrator
+test-results
+playwright-report
+dist
+**/dist
+test/fixtures/pathfinder/LOCAL_DB.md

@@ -99,6 +99,26 @@ function renderWithPayload(payload: TodayPayload): string {
   );
 }
 
+function renderWithQueryError(message: string): string {
+  // retryOnMount: false keeps the seeded error state settled through the
+  // render — otherwise mounting would synchronously kick off a refetch
+  // (since data is undefined) and flip status back to pending before we
+  // can observe the bug this test guards against.
+  const client = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity, retry: false, retryOnMount: false } },
+  });
+  const query = client.getQueryCache().build(client, { queryKey: queryKeys.today });
+  query.setState({
+    status: 'error',
+    error: new Error(message),
+    data: undefined,
+    fetchStatus: 'idle',
+  });
+  return renderToStaticMarkup(
+    createElement(QueryClientProvider, { client }, createElement(TodayPage))
+  );
+}
+
 describe('TodayPage', () => {
   it('renders both venture sections, the Graham Interiors row and its account 48 link', () => {
     const payload: TodayPayload = {
@@ -141,5 +161,13 @@ describe('TodayPage', () => {
 
     expect(html).toContain('data-testid="totals-header"');
     expect(html).toContain('data-testid="totals-activeAccounts"');
+  });
+
+  it('renders the top-level error state when the query itself fails, instead of Loading', () => {
+    const html = renderWithQueryError('network unreachable');
+
+    expect(html).toContain('data-testid="today-error"');
+    expect(html).toContain('network unreachable');
+    expect(html).not.toContain('data-testid="today-loading"');
   });
 });

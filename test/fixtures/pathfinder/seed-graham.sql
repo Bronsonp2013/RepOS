@@ -14,6 +14,18 @@
 --   - trips id 1: starts 2026-07-08.
 --   - trip_stops id 1: trip 1, account 48, stop_date 2026-07-08, anchored to
 --     appointment 1, at account 48's primary location.
+--   - accounts id 49, 50: "TEST — ..." retail accounts, each with a primary
+--     account_locations row, for the needsVisit NULLS FIRST ordering test.
+--     49 was visited earlier (2026-01-15) than 50 (2026-06-20), so the
+--     worst-first order for the top three is 48 (never visited), 49, 50.
+--   - cycles id 1: one active monthly cycle. Its period_key for the fixed
+--     test `now` (2026-07-01T12:00:00Z, America/Chicago) is '2026-07'.
+--   - cycle_progress id 1: cycle 1 covers account 48's primary location for
+--     period_key '2026-07'.
+--   - cycle_exclusions id 1: cycle 1 excludes account 49's primary location,
+--     so it counts toward neither eligible nor covered.
+--   - prospects id 1, 2: two live prospects, lexington DB only (the venture
+--     DB is never seeded — it stays the empty-instance fixture).
 -- =============================================================================
 
 BEGIN;
@@ -84,5 +96,92 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 SELECT setval(pg_get_serial_sequence('trip_stops', 'id'), (SELECT MAX(id) FROM trip_stops));
+
+-- accounts id 49, 50: visited at different ages, for the needsVisit
+-- NULLS FIRST ordering test (account 48 stays first, never visited).
+INSERT INTO accounts (id, name, account_type, account_stage_id, first_seen_at, last_visit_at)
+OVERRIDING SYSTEM VALUE
+VALUES (
+    49,
+    'TEST — Needs Visit Older',
+    'retail',
+    (SELECT id FROM account_stages WHERE key = 'active'),
+    NOW(),
+    '2026-01-15T12:00:00Z'
+)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO accounts (id, name, account_type, account_stage_id, first_seen_at, last_visit_at)
+OVERRIDING SYSTEM VALUE
+VALUES (
+    50,
+    'TEST — Needs Visit Newer',
+    'retail',
+    (SELECT id FROM account_stages WHERE key = 'active'),
+    NOW(),
+    '2026-06-20T12:00:00Z'
+)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('accounts', 'id'), (SELECT MAX(id) FROM accounts));
+
+-- account_locations: primary locations for accounts 49, 50
+INSERT INTO account_locations (account_id, label, city, state, geo, is_primary)
+SELECT 49, NULL, 'Austin', 'TX', NULL, TRUE
+WHERE NOT EXISTS (
+    SELECT 1 FROM account_locations WHERE account_id = 49 AND is_primary
+);
+INSERT INTO account_locations (account_id, label, city, state, geo, is_primary)
+SELECT 50, NULL, 'Houston', 'TX', NULL, TRUE
+WHERE NOT EXISTS (
+    SELECT 1 FROM account_locations WHERE account_id = 50 AND is_primary
+);
+
+-- cycles id 1: one active monthly cycle
+INSERT INTO cycles (id, name, period, active)
+OVERRIDING SYSTEM VALUE
+VALUES (1, 'TEST — Coverage cycle', 'monthly', TRUE)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('cycles', 'id'), (SELECT MAX(id) FROM cycles));
+
+-- cycle_progress id 1: cycle 1 covers account 48's primary location for the
+-- current period ('2026-07', per cyclePeriodKey at the fixed test `now`).
+INSERT INTO cycle_progress (id, cycle_id, location_id, period_key)
+OVERRIDING SYSTEM VALUE
+SELECT 1, 1, al.id, '2026-07'
+FROM account_locations al
+WHERE al.account_id = 48 AND al.is_primary
+ON CONFLICT (cycle_id, location_id, period_key) WHERE deleted_at IS NULL DO NOTHING;
+SELECT setval(pg_get_serial_sequence('cycle_progress', 'id'), (SELECT MAX(id) FROM cycle_progress));
+
+-- cycle_exclusions id 1: cycle 1 excludes account 49's primary location
+INSERT INTO cycle_exclusions (id, cycle_id, location_id)
+OVERRIDING SYSTEM VALUE
+SELECT 1, 1, al.id
+FROM account_locations al
+WHERE al.account_id = 49 AND al.is_primary
+ON CONFLICT (cycle_id, location_id) WHERE deleted_at IS NULL DO NOTHING;
+SELECT setval(pg_get_serial_sequence('cycle_exclusions', 'id'), (SELECT MAX(id) FROM cycle_exclusions));
+
+-- prospects id 1, 2: lexington DB only (the venture DB is never seeded)
+INSERT INTO prospects (id, company_name, city, state, prospect_stage_id)
+OVERRIDING SYSTEM VALUE
+VALUES (
+    1,
+    'TEST — Prospect One',
+    'Dallas',
+    'TX',
+    (SELECT id FROM prospect_stages WHERE key = 'researched')
+)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO prospects (id, company_name, city, state, prospect_stage_id)
+OVERRIDING SYSTEM VALUE
+VALUES (
+    2,
+    'TEST — Prospect Two',
+    'Fort Worth',
+    'TX',
+    (SELECT id FROM prospect_stages WHERE key = 'contacted')
+)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('prospects', 'id'), (SELECT MAX(id) FROM prospects));
 
 COMMIT;

@@ -1,8 +1,10 @@
 /**
  * C7 — one unreachable source degrades only its own section.
- * Owned by the `routes` lane. Points the venture source at
- * REPOS_TEST_CLOSED_DATABASE_URL (a port nothing listens on) and asserts the
- * request still succeeds with lexington data intact.
+ * Owned by the `routes` lane. Boots the factory against real, reachable
+ * sources (schema check passes for both, per docs/REPOS_V1.md §7.7), then
+ * simulates "stopping the venture's Postgres" (docs/REPOS_V1.md §7.6) by
+ * ending the pathfinder pool after boot, and asserts the request still
+ * succeeds with lexington data intact.
  * Selected by: npm test -- degrade
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -16,15 +18,16 @@ let factory: SourcePoolFactory;
 let app: Express;
 
 beforeAll(async () => {
-  const configs = await loadSourceConfigs({
-    env: {
-      ...process.env,
-      REPOS_SOURCE_PATHFINDER_DATABASE_URL: process.env.REPOS_TEST_CLOSED_DATABASE_URL,
-    },
-  });
-  // Short so an unreachable source can't delay a request beyond a bounded wait.
-  factory = await createSourcePools(configs, { connectionTimeoutMillis: 1000 });
+  const configs = await loadSourceConfigs();
+  factory = await createSourcePools(configs);
   app = createServer(factory);
+
+  // Simulate the venture's Postgres going down *after* boot succeeded: end
+  // its pool so subsequent queries reject, without touching the schema
+  // check that already passed.
+  const pathfinder = factory.get('pathfinder');
+  if (!pathfinder) throw new Error('pathfinder source not configured for this test');
+  await pathfinder.pool.end();
 });
 
 afterAll(async () => {

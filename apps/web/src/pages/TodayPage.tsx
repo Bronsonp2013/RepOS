@@ -9,23 +9,23 @@ import TotalsHeader from '../components/TotalsHeader';
 import SourceSection from '../components/SourceSection';
 
 export default function TodayPage() {
-  const { data, isPending, error } = useQuery<TodayPayload>({
+  const { data, isPending, isError, error } = useQuery<TodayPayload>({
     queryKey: queryKeys.today,
     queryFn: fetchToday,
   });
 
-  if (isPending || !data) {
+  if (isError) {
     return (
-      <main data-testid="today-loading" className="p-4 text-sm text-slate-500">
-        Loading…
+      <main data-testid="today-error" className="p-4 text-sm text-red-700">
+        {error instanceof Error ? error.message : String(error)}
       </main>
     );
   }
 
-  if (error) {
+  if (isPending) {
     return (
-      <main data-testid="today-error" className="p-4 text-sm text-red-700">
-        {error instanceof Error ? error.message : String(error)}
+      <main data-testid="today-loading" className="p-4 text-sm text-slate-500">
+        Loading…
       </main>
     );
   }

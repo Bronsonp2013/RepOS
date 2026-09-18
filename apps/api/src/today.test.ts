@@ -66,7 +66,9 @@ describe('GET /api/today (C6)', () => {
 
   it('shows zero accounts and zero prospects for the venture source', async () => {
     const res = await request(app).get('/api/today');
-    const pathfinder = (res.body.sources as Array<Record<string, unknown>>).find((s) => s.slug === 'pathfinder');
+    const sources = res.body.sources as Array<Record<string, unknown>>;
+    const pathfinder = sources.find((s) => s.slug === 'pathfinder');
+    const lexington = sources.find((s) => s.slug === 'lexington');
 
     expect(pathfinder).toBeDefined();
     expect(pathfinder!.error).toBeUndefined();
@@ -74,6 +76,17 @@ describe('GET /api/today (C6)', () => {
     const totals = pathfinder!.totals as Record<string, number>;
     expect(totals.activeAccounts).toBe(0);
     expect(totals.prospectsInPipeline).toBe(0);
+
+    // Positive control: lexington seeds two live prospects (seed-graham.sql),
+    // the venture DB seeds none, so this isn't a query that returns zero rows
+    // no matter what it's given.
+    const lexingtonPipeline = lexington!.pipeline as Array<Record<string, number>>;
+    const lexingtonProspectSum = lexingtonPipeline.reduce((sum, row) => sum + row.prospectCount, 0);
+    expect(lexingtonProspectSum).toBe(2);
+
+    const pathfinderPipeline = pathfinder!.pipeline as Array<Record<string, number>>;
+    const pathfinderProspectSum = pathfinderPipeline.reduce((sum, row) => sum + row.prospectCount, 0);
+    expect(pathfinderProspectSum).toBe(0);
   });
 
   it('lists prospect_stages in sort_order and returns a coverage block', async () => {

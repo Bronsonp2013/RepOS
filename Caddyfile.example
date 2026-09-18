@@ -6,6 +6,15 @@
 # run the image's `vite preview` mode instead (see docker-compose.yml).
 
 repos.<your-tailnet-name>.ts.net {
+    # Security headers for the same-origin SPA. No external script/style/
+    # frame sources are needed; the API is same-origin under /api/*.
+    header {
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        X-Content-Type-Options "nosniff"
+    }
+
     # Static web bundle.
     root * /path/to/repos/apps/web/dist
     file_server

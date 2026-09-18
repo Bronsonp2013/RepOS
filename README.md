@@ -49,8 +49,7 @@ server loads `.env` on its own; `apps/api` loads it explicitly in
 
 ## Status
 
-V1 built and under review. All implementation lanes (sources, blocks, routes,
-web, deploy-docs) have landed and been integrated. `npm run typecheck`,
+V1 built; remediation applied; awaiting acceptance. `npm run typecheck`,
 `npm run lint`, `npm test`, `npm run build -w apps/web`, and `npm run e2e`
 all pass. `npm run dev` starts the API and web app together against `.env`.
 Deploy surface is drafted (`Dockerfile`, `docker-compose.yml`,

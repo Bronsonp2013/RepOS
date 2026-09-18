@@ -3,11 +3,11 @@
  * and the boot schema verdict, with no credential in the output (C9).
  * Covered by sources.test.ts.
  */
-import type { HealthReport, SourceHealth, SourceSummary } from '@repos/shared';
+import type { HealthReport, MeetingTypeSummary, SourceHealth, SourceSummary } from '@repos/shared';
 import { EXPECTED_MIGRATION } from '@repos/sources';
 import type { SourcePool, SourcePoolFactory } from '@repos/sources';
 import { errorMessage } from './redact';
-import { DEFAULT_TIMEZONE, readMeetingTypeKeys, readTimezone } from './sourceContext';
+import { DEFAULT_TIMEZONE, readMeetingTypes, readTimezone } from './sourceContext';
 
 export async function buildSourceSummaries(factory: SourcePoolFactory): Promise<SourceSummary[]> {
   return Promise.all(
@@ -15,7 +15,7 @@ export async function buildSourceSummaries(factory: SourcePoolFactory): Promise<
       const { config, schema } = sourcePool;
       const [timezone, meetingTypes] = await Promise.all([
         readTimezone(sourcePool.pool).catch(() => DEFAULT_TIMEZONE),
-        readMeetingTypeKeys(sourcePool.pool).catch(() => [] as string[]),
+        readMeetingTypes(sourcePool.pool).catch(() => [] as MeetingTypeSummary[]),
       ]);
 
       return {

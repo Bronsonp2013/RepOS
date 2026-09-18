@@ -49,16 +49,10 @@ describe('Today blocks (unit)', () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.length).toBeLessThanOrEqual(8);
 
-    // last_visit_at NULLS FIRST: every null entry precedes every non-null one.
-    const firstNonNullIndex = rows.findIndex((r) => r.lastVisitAt !== null);
-    if (firstNonNullIndex !== -1) {
-      expect(rows.slice(0, firstNonNullIndex).every((r) => r.lastVisitAt === null)).toBe(true);
-    }
-    for (let i = 1; i < rows.length; i++) {
-      if (rows[i - 1].lastVisitAt !== null && rows[i].lastVisitAt !== null) {
-        expect(rows[i - 1].lastVisitAt! <= rows[i].lastVisitAt!).toBe(true);
-      }
-    }
+    // Seeded fixture has exactly three accounts: 48 (never visited), 49
+    // (visited 2026-01-15, older), 50 (visited 2026-06-20, newer). Worst-first
+    // with NULLS FIRST puts 48 ahead of both, then 49 ahead of 50.
+    expect(rows.map((r) => r.accountId)).toEqual([48, 49, 50]);
 
     const graham = rows.find((r) => r.accountId === 48);
     expect(graham).toMatchObject({
@@ -142,15 +136,23 @@ describe('Today blocks (unit)', () => {
 
     const rows = await coverage(lexington!.pool, ctx);
 
-    // The fixture seeds no cycles; the block must still resolve cleanly.
-    expect(Array.isArray(rows)).toBe(true);
-    for (const row of rows) {
-      expect(row.eligibleLocations).toBeGreaterThanOrEqual(0);
-      expect(row.coveredLocations).toBeGreaterThanOrEqual(0);
-      expect(row.ratio).toBeGreaterThanOrEqual(0);
-      expect(row.ratio).toBeLessThanOrEqual(1);
-      expect(row.href).toBe(`http://pathfinder.local:3000/cycles/${row.cycleId}`);
-    }
+    // Fixture seeds one active monthly cycle (id 1). `now` (2026-07-01T12:00Z,
+    // America/Chicago) falls in period_key '2026-07'. Eligible locations: the
+    // three seeded accounts' primary locations (48, 49, 50) minus the one
+    // cycle_exclusions row for 49's location, = 2. Covered: cycle_progress
+    // covers 48's location for '2026-07', = 1.
+    expect(rows.length).toBe(1);
+    const cycle = rows[0];
+    expect(cycle).toMatchObject({
+      cycleId: 1,
+      name: 'TEST — Coverage cycle',
+      period: 'monthly',
+      periodKey: '2026-07',
+      eligibleLocations: 2,
+      coveredLocations: 1,
+      ratio: 0.5,
+      href: 'http://pathfinder.local:3000/cycles/1',
+    });
   });
 
   it('totals matches the per-source sums services/today.ts adds into TodayTotals', async () => {

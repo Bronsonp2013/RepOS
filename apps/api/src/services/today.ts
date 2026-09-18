@@ -25,6 +25,9 @@ let nowOverride: Date | null = null;
 
 /** Test-only: pin `now` for subsequent calls. Pass `null` to go back to the wall clock. */
 export function setNowOverrideForTests(now: Date | null): void {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('setNowOverrideForTests must not be called in production');
+  }
   nowOverride = now;
 }
 

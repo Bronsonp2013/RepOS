@@ -42,13 +42,29 @@ describe('GET /api/sources (C5)', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/:\/\/[^"]*@/);
   });
 
-  it('exposes the venture instance meeting types', async () => {
+  it('exposes the venture instance meeting types, each with a name', async () => {
     const res = await request(app).get('/api/sources');
     const pathfinder = (res.body as Array<Record<string, unknown>>).find((s) => s.slug === 'pathfinder');
     expect(pathfinder).toBeDefined();
-    expect(pathfinder!.meetingTypes).toEqual(
-      expect.arrayContaining(['checkin', 'presentation', 'prospecting', 'training', 'updating_sales_aids'])
+
+    const meetingTypes = pathfinder!.meetingTypes as Array<{
+      id: number;
+      key: string | null;
+      name: string;
+    }>;
+
+    // All five seeded types (migration 0015) are present, each with a name.
+    const seededKeys = ['checkin', 'presentation', 'prospecting', 'training', 'updating_sales_aids'];
+    expect(meetingTypes).toEqual(
+      expect.arrayContaining(
+        seededKeys.map((key) => expect.objectContaining({ key, name: expect.any(String) }))
+      )
     );
+
+    for (const meetingType of meetingTypes) {
+      expect(typeof meetingType.name).toBe('string');
+      expect(meetingType.name.length).toBeGreaterThan(0);
+    }
   });
 });
 

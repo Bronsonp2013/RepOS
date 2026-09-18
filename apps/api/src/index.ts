@@ -21,6 +21,10 @@ dotenv.config({ path: resolve(REPO_ROOT, '.env') });
 
 const PORT = Number(process.env.REPOS_API_PORT ?? 3200);
 
+// Tailnet-only: bind to loopback unless the environment names a different
+// host explicitly (docs/REPOS_V1.md §2.6, .env.example).
+const HOST = process.env.REPOS_API_HOST ?? '127.0.0.1';
+
 // Bounded so a source whose connection is refused can't hang a boot or a
 // request past a short, known wait (docs/REPOS_V1.md §7.6).
 const CONNECTION_TIMEOUT_MS = Number(process.env.REPOS_DB_CONNECT_TIMEOUT_MS ?? 3000);
@@ -43,8 +47,8 @@ export async function main(): Promise<void> {
   }
 
   const app = createServer(factory);
-  app.listen(PORT, () => {
-    console.log(`[repos-api] listening on :${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`[repos-api] listening on ${HOST}:${PORT}`);
   });
 }
 

@@ -4,6 +4,7 @@
  * Covered by sources.test.ts.
  */
 import type { Pool } from 'pg';
+import type { MeetingTypeSummary } from '@repos/shared';
 
 /** Fallback used only when a source's `users` row can't be read. */
 export const DEFAULT_TIMEZONE = 'America/Chicago';
@@ -20,17 +21,18 @@ export async function readTimezone(pool: Pool): Promise<string> {
   return result.rows[0]?.timezone ?? DEFAULT_TIMEZONE;
 }
 
-interface MeetingTypeKeyRow {
-  key: string;
-}
-
-/** Distinct, non-null `meeting_types.key` values configured in this instance. */
-export async function readMeetingTypeKeys(pool: Pool): Promise<string[]> {
-  const result = await pool.query<MeetingTypeKeyRow>(
-    `SELECT DISTINCT key
+/**
+ * `meeting_types` rows configured in this instance, seeded and rep-created
+ * alike. `key IS NULL` is not filtered out here: a rep-added meeting type
+ * (migration 0015) has no `key` and must still surface, identified by `id`
+ * (see `MeetingTypeSummary`).
+ */
+export async function readMeetingTypes(pool: Pool): Promise<MeetingTypeSummary[]> {
+  const result = await pool.query<MeetingTypeSummary>(
+    `SELECT id, key, name
        FROM meeting_types
-      WHERE deleted_at IS NULL AND key IS NOT NULL
-      ORDER BY key`
+      WHERE deleted_at IS NULL
+      ORDER BY key, name`
   );
-  return result.rows.map((row) => row.key);
+  return result.rows;
 }

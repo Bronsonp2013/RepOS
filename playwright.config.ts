@@ -4,7 +4,10 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.test', override: false });
 
 const apiPort = Number(process.env.REPOS_API_PORT ?? 3200);
-const webPort = Number(process.env.REPOS_WEB_PORT ?? 5173);
+// Distinct from REPOS_WEB_PORT (the `npm run dev` port, 5173 by default) so
+// e2e can never reuse a leftover dev server and silently test unbuilt
+// source. Vite's own preview default (4173) is used unless overridden.
+const webPort = Number(process.env.REPOS_E2E_WEB_PORT ?? 4173);
 const webBaseUrl = `http://127.0.0.1:${webPort}`;
 
 export default defineConfig({
@@ -29,17 +32,23 @@ export default defineConfig({
   webServer: [
     {
       // API against the fixture databases in .env.test (loaded above into
-      // process.env, which both child servers inherit).
+      // process.env, which both child servers inherit). REPOS_WEB_ORIGIN is
+      // overridden here to match the e2e preview origin above (webPort),
+      // which is intentionally not .env.test's REPOS_WEB_PORT/ORIGIN (the
+      // `npm run dev` port) — otherwise CORS would reject the built preview.
       command: 'npm run start -w apps/api',
       url: `http://127.0.0.1:${apiPort}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+      env: { ...process.env, REPOS_WEB_ORIGIN: webBaseUrl },
     },
     {
       // Built bundle, not the dev server, so C8 exercises what actually ships.
+      // Never reuse an existing server here: this must always be the bundle
+      // just built, not a leftover process (dev or otherwise) on this port.
       command: `npm run build -w apps/web && npm run preview -w apps/web -- --port ${webPort} --strictPort`,
       url: webBaseUrl,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60_000,
     },
   ],
