@@ -79,6 +79,20 @@ export interface NeedsVisitRow {
   href: string;
 }
 
+/**
+ * A `meeting_types` row, resolved for an anchored appointment (migration 0015).
+ * `key` is the seed/backfill correspondence for the five types migration 0015
+ * seeds (`prospecting`, `presentation`, `checkin`, `training`,
+ * `updating_sales_aids`); a rep-created meeting type has `key IS NULL` and is
+ * never rendered by its key, so consumers must identify a meeting type by
+ * `id`, never by `key`, when `key` is null.
+ */
+export interface MeetingTypeSummary {
+  id: number;
+  key: string | null;
+  name: string;
+}
+
 /** One appointment-anchored stop inside an upcoming trip. */
 export interface TripStopSummary {
   stopId: number;
@@ -91,11 +105,20 @@ export interface TripStopSummary {
   startsAt: string | null;
   /** Same instant rendered in the source's timezone, e.g. `2026-07-08 2:00 PM`. */
   startsAtLocal: string | null;
-  /** `meeting_types.key` for the anchored appointment; null when unanchored. */
-  meetingTypeKey: string | null;
+  /**
+   * The anchored appointment's meeting type; null when the stop has no
+   * appointment (mirrors `startsAt`/`startsAtLocal`). See `MeetingTypeSummary`
+   * for the null semantics of the `key` field inside it.
+   */
+  meetingType: MeetingTypeSummary | null;
 }
 
-/** Today → "Upcoming trips": `start_date >= today`, soonest first. */
+/**
+ * Today → "Upcoming trips": `start_date >= today`, soonest first. "Today" is
+ * evaluated against `BlockContext.now` (apps/api/src/blocks/context.ts), not
+ * the wall clock at request time, so a block and its tests can agree on a
+ * fixed instant.
+ */
 export interface UpcomingTripRow {
   tripId: number;
   name: string;
@@ -149,13 +172,32 @@ export interface TodaySource {
   pipeline: PipelineRow[];
   coverage: CoverageRow[];
   /**
+   * This source's own totals, computed by `apps/api/src/blocks/totals.ts`.
+   * `services/today.ts` sums these across every source that answered into
+   * the page-level `TodayPayload.totals` (see `TodayTotals`).
+   */
+  totals: SourceTotals;
+  /**
    * Set when this source could not be read. The other arrays are then empty and
    * the rest of the page still renders (docs/REPOS_V1.md §7.6). Absent on success.
    */
   error?: string;
 }
 
-/** Cross-venture header numbers, summed over sources that answered. */
+/** One source's contribution to the cross-venture totals; see `TodaySource.totals`. */
+export interface SourceTotals {
+  activeAccounts: number;
+  prospectsInPipeline: number;
+  tripsThisWeek: number;
+  /** Accounts never visited or last visited 90+ days ago. */
+  staleAccounts: number;
+}
+
+/**
+ * Cross-venture header numbers. Same shape as `SourceTotals` — it is the
+ * field-wise sum of every source's `totals` for sources that answered
+ * (`services/today.ts`), so a source with an `error` contributes zero.
+ */
 export interface TodayTotals {
   activeAccounts: number;
   prospectsInPipeline: number;

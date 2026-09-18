@@ -83,5 +83,11 @@ export interface SourcePoolFactory {
 /** Signature of the factory entry point. */
 export type CreateSourcePools = (
   configs: SourceConfig[],
-  options?: { max?: number }
+  options?: {
+    max?: number;
+    /** `pg.Pool` `connectionTimeoutMillis`: how long to wait for a free connection. */
+    connectionTimeoutMillis?: number;
+    /** `pg.Pool` `statement_timeout` (ms), set per-connection so one slow read-only query can't hang a request. */
+    statementTimeoutMillis?: number;
+  }
 ) => Promise<SourcePoolFactory>;

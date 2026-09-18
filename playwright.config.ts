@@ -25,7 +25,8 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: 'npm run dev -w apps/web',
+      // Built bundle, not the dev server, so C8 exercises what actually ships.
+      command: `npm run build -w apps/web && npm run preview -w apps/web -- --port ${webPort} --strictPort`,
       url: webBaseUrl,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

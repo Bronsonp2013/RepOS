@@ -150,7 +150,8 @@ Credentials go in `.env` as `REPOS_SOURCE_<SLUG>_DATABASE_URL`, never in
    (account 48, appointment 2026-07-08 2 PM–3 PM Central) under Upcoming
    trips when a trip anchors it, at 2:00 PM Central.
 5. The venture section shows zero accounts, zero prospects, and the two
-   meeting types are visible via `GET /api/sources` detail.
+   hand-added meeting types are present among the seeded set visible via
+   `GET /api/sources` detail.
 6. Stopping the venture's Postgres degrades only that section, with an
    error state; Lexington keeps rendering.
 7. Boot against a source whose `schema_migrations` is missing `0029_sessions.sql`

@@ -1,6 +1,8 @@
 /**
  * C6 — GET /api/today against the fixture databases.
- * Owned by the `blocks` lane. Asserts the four block outputs:
+ * Endpoint-level test, owned by the `routes` lane (block-level tests live in
+ * apps/api/src/blocks/today-blocks.test.ts, owned by the `blocks` lane).
+ * Asserts the four block outputs as seen through the assembled response:
  *   - lexington needsVisit lists account 48 first (never visited);
  *   - lexington upcomingTrips contains the trip anchored on appointment 1,
  *     rendered as 2026-07-08 2:00 PM America/Chicago;
