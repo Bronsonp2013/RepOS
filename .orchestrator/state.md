@@ -1,6 +1,6 @@
 # Orchestration state — RepOS V1
 
-**Run closed 2026-09-18. Accepted.** Rewritten at close; history is in the gate commits.
+**Run 2 opened 2026-09-18: full review and remediation** (plan: /root/.claude/plans/use-engineering-skills-to-giggly-pearl.md). Run 1 accepted at f706da7.
 
 ## Run
 
@@ -31,7 +31,7 @@ All commands run from `/home/user/RepOS`. Final acceptance (attempt 2): every cr
 
 ## Current phase
 
-`7 — Acceptance: accepted: true (attempt 2). Run closed.`
+`Run 2, R1 — five Opus review lenses (A data, B concurrency, C security, D web, E deploy/docs/tests), then R2 verifier`
 
 ## Lane map
 
