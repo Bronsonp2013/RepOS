@@ -1,0 +1,409 @@
+{
+ "accepted": [
+  {
+   "id": "F1,F2,F4,F7",
+   "lane": "L1",
+   "severity": "minor",
+   "where": "blocks/coverage.ts:53, upcomingTrips.ts:73, totals.ts:46-60, needsVisit.ts:46",
+   "what": "UNTESTED, not proven bugs: weekly/custom period_key, soft-deleted-account stops, unstaged prospects, stale-vs-active stage mismatch. Fixture has no row exercising any of them.",
+   "fix": "Add fixture rows (weekly+custom cycle, soft-deleted account with a stop, soft-deleted prospect_stage, non-active-stage never-visited account) and assert the intended counts before changing SQL.",
+   "evidence": "Block SQL with and without each proposed filter returns identical counts on repos_test_lexington: 1 trip stop, prospects 2=2, active 3 / stale 3, only cycle is monthly '2026-07'."
+  },
+  {
+   "id": "F8",
+   "lane": "L1",
+   "severity": "minor",
+   "where": "apps/api/src/blocks/needsVisit.ts:52, coverage.ts:85, upcomingTrips.ts:109",
+   "what": "bigint ids go through Number() and round above 2^53, so a deep-link href built from the rounded value would 404 while the raw string id was in hand.",
+   "fix": "Keep ids as strings in the contract and build hrefs from the raw string (upcomingTrips.ts:116 already does).",
+   "evidence": "Node: Number('9007199254740995') -> 9007199254740996; pg returns bigint as string, so the raw value was available."
+  },
+  {
+   "id": "F15b",
+   "lane": "L1",
+   "severity": "major",
+   "where": "apps/api/src/blocks/coverage.ts:47-55",
+   "what": "coverage runs 1+N serial queries (one per active cycle); statement_timeout is per statement, so worst-case latency scales with cycle count and no bound caps the block.",
+   "fix": "Collapse the per-cycle loop into one set-based query joining cycles to the eligible/covered subqueries, with period_key passed as an array or computed per row.",
+   "evidence": "Read coverage.ts: cycles query then an awaited counts query inside the for-loop; statement_timeout applies per statement only."
+  },
+  {
+   "id": "F6",
+   "lane": "L2",
+   "severity": "minor",
+   "where": "apps/api/src/services/sourceContext.ts:35",
+   "what": "meeting_types ordered by `key`, a seed-only field; rep-created types (key NULL) always sort last, and sort_order/active are ignored entirely.",
+   "fix": "ORDER BY sort_order, name and either filter inactive rows or expose `active` on MeetingTypeSummary.",
+   "evidence": "SELECT id,key,name,active,sort_order FROM meeting_types on the fixture: sort_order 1-5 present, active present; neither is read by the query."
+  },
+  {
+   "id": "F8b",
+   "lane": "L2",
+   "severity": "major",
+   "where": "apps/api/src/services/sourceContext.ts:31-37",
+   "what": "NEW: readMeetingTypes casts raw rows to MeetingTypeSummary, so bigint id is emitted as a string while the shared contract declares id: number. Live payload violates the contract.",
+   "fix": "Map the rows explicitly (id: Number(row.id), or keep id as a string in MeetingTypeSummary) so /api/sources matches packages/shared/src/api.ts.",
+   "evidence": "GET /api/sources on the running API returned meetingTypes [{\"id\":\"3\",...}]; packages/shared/src/api.ts:99 declares id: number."
+  },
+  {
+   "id": "F9,F10,F14",
+   "lane": "L2",
+   "severity": "major",
+   "where": "apps/api/src/services/today.ts:80-102",
+   "what": "One Promise.all under one try/catch: any block error blanks all five blocks, and a SQL typo or a pool-acquire timeout degrades a source with the same wording as a real outage.",
+   "fix": "Settle the five block promises independently; classify pg codes (42703/42P01) and acquire timeouts separately from unreachable, log query errors at error level, keep HTTP 200 per-source degrade.",
+   "evidence": "Pool probe with max 5: the 6th and 7th concurrent queries rejected with 'timeout exceeded when trying to connect', which buildOne's catch turns into degradedSource()."
+  },
+  {
+   "id": "F12,F18",
+   "lane": "L2",
+   "severity": "major",
+   "where": "apps/api/src/services/reachability.ts:24-31",
+   "what": "No in-flight dedup or negative caching, so N concurrent requests fire N probes at a down source; and only 'unreachable' is ever rechecked, so a behind/unknown recheck latches until restart.",
+   "fix": "Memoize the in-flight recheck promise per source with a short cooldown (10-30s), and re-validate every status on a TTL so a recovered source is promoted back.",
+   "evidence": "ensureSchemaCurrent returns early unless status==='unreachable' and holds no promise cache; each call issues its own checkSourceSchema query."
+  },
+  {
+   "id": "F13,F20,F22",
+   "lane": "L2",
+   "severity": "major",
+   "where": "apps/api/src/services/health.ts:19-20, 41-47, 62",
+   "what": "Health verdict ignores schemaStatus; latencyMs starts after the recheck/acquire; timezone and meetingTypes failures are swallowed into plausible defaults.",
+   "fix": "Fold schemaStatus into the verdict (anything not ok/ahead is degraded), time from the start of the probe, and surface a null timezone or error field instead of DEFAULT_TIMEZONE/[].",
+   "evidence": "Live /api/sources on an unreachable source returned schemaStatus 'unreachable' with timezone 'America/Chicago' and meetingTypes []; status is computed from `reachable` alone."
+  },
+  {
+   "id": "F15",
+   "lane": "L2",
+   "severity": "major",
+   "where": "apps/api/src/routes/today.ts:8-14, services/today.ts:128",
+   "what": "No request-level or per-source deadline anywhere; statement_timeout bounds one statement, so a slow source multiplies it by the number of serial statements.",
+   "fix": "Add a per-request deadline around buildToday and a per-source budget inside buildOne, degrading the source that overruns.",
+   "evidence": "routes/today.ts awaits buildToday with no timeout; pg applies statement_timeout per statement (node_modules/pg/lib/client.js:558)."
+  },
+  {
+   "id": "F21",
+   "lane": "L2",
+   "severity": "minor",
+   "where": "apps/api/src/services/today.ts:25-33, 136",
+   "what": "The nowOverride module global is guarded only by NODE_ENV==='production', which apps/api/src/index.ts never sets, so it is armed outside the Docker image; generatedAt ignores it.",
+   "fix": "Per the owner decision, inject `now` via createServer options instead of a module global, and derive generatedAt from that same instant.",
+   "evidence": "index.ts sets no NODE_ENV (only Dockerfile:39 does); setNowOverrideForTests throws only when NODE_ENV==='production'."
+  },
+  {
+   "id": "F27",
+   "lane": "L2",
+   "severity": "major",
+   "where": "apps/api/src/services/redact.ts:13",
+   "what": "Redaction matches only scheme://user:pass@host, so a DSN carrying ?password= or a keyword DSN reaches a 500 body or a log line unredacted.",
+   "fix": "Also strip password=/PGPASSWORD= key-value pairs in query strings and keyword DSNs before returning the message.",
+   "evidence": "Ran CREDENTIAL_SHAPED on 'postgresql://127.0.0.1:5432/db?password=S3cr3t': returned unchanged."
+  },
+  {
+   "id": "F11",
+   "lane": "L3",
+   "severity": "major",
+   "where": "packages/sources/src/pool.ts:13, 35",
+   "what": "Per-source max is hard-clamped to 5 by Math.min while one request fires 5 block queries in parallel, so two concurrent requests to one source already queue behind the acquire timeout.",
+   "fix": "Allow a configurable per-source max (or bound blocks in flight to 2-3 in services/today.ts) so normal concurrency cannot exhaust the pool.",
+   "evidence": "Probe with max 5: 5 concurrent pg_sleep(4) succeeded, the 6th and 7th failed with 'timeout exceeded when trying to connect'."
+  },
+  {
+   "id": "F17,F26",
+   "lane": "L3",
+   "severity": "minor",
+   "where": "packages/sources/src/pool.ts:75-77, schema.ts:27-31",
+   "what": "createSourcePoolFactory is an unused export that drops both timeout options, and schema.ts holds a second, unexported, untested copy of the credential regex that can silently diverge.",
+   "fix": "Delete createSourcePoolFactory (or pass the same bounded defaults), and export one redactMessage from @repos/sources with a unit case covering it.",
+   "evidence": "grep for createSourcePoolFactory finds only its declaration; grep 'redact' in packages/sources/src/*.test.ts returns no hits."
+  },
+  {
+   "id": "F28,F63",
+   "lane": "L3",
+   "severity": "minor",
+   "where": "packages/sources/src/pool.ts:52",
+   "what": "The pool 'error' listener logs raw (err as Error).message, the only error sink that bypasses redaction, directly contradicting its own comment; nothing tests the claim.",
+   "fix": "Route the message through the shared redaction helper before console.error and add a test that a credential-shaped message is scrubbed.",
+   "evidence": "Read the listener: console.error interpolates the raw message; grep 'redact' in packages/sources/src/pool.ts returns nothing."
+  },
+  {
+   "id": "F35,F46",
+   "lane": "L3",
+   "severity": "minor",
+   "where": "packages/sources/src/config.ts:26, 48",
+   "what": "rejectCredentialShaped rejects any name containing password/secret/token, so a venture named e.g. 'Token Furniture' makes sources.json unloadable; a webUrl with a trailing slash is kept verbatim.",
+   "fix": "Apply the keyword check to slug/webUrl only (or require a key=value shape), and strip trailing slashes from webUrl in parseSourcesFile.",
+   "evidence": "Regex /password|secret|token/i is applied to entry.name; 'http://pathfinder.local:3000/' + '/accounts/48' yields a double slash."
+  },
+  {
+   "id": "F24",
+   "lane": "L4",
+   "severity": "blocker",
+   "where": "apps/web/src/lib/api.ts:8",
+   "what": "The shipped bundle bakes an absolute base http://127.0.0.1:3200, which Caddyfile.example's connect-src 'self' blocks, and the Docker build cannot override it (no ARG, .env dockerignored).",
+   "fix": "Default API_BASE_URL to '' so every call is same-origin /api/*, per the owner's Caddy decision.",
+   "evidence": "grep -o 'http://127.0.0.1:[0-9]*' apps/web/dist/assets/*.js returns the literal once; grep ARG Dockerfile returns nothing."
+  },
+  {
+   "id": "F37,F38",
+   "lane": "L4",
+   "severity": "major",
+   "where": "apps/web/src/main.tsx:15, pages/TodayPage.tsx:36, lib/api.ts:34",
+   "what": "apiGet casts the response to T with no validation and nothing catches a render error, so any API shape drift becomes a blank white page instead of an error state.",
+   "fix": "Parse responses with zod (already a dependency in packages/sources) in apiGet, and wrap App in an ErrorBoundary that renders a recoverable message.",
+   "evidence": "api.ts:34 returns (await res.json()) as T; no ErrorBoundary appears in main.tsx or App.tsx; data.sources.map throws when sources is absent."
+  },
+  {
+   "id": "F39",
+   "lane": "L4",
+   "severity": "major",
+   "where": "apps/web/src/pages/TodayPage.tsx:17",
+   "what": "isError is checked before data, so a failed background refetch discards good cached data and replaces the whole page with a raw error string.",
+   "fix": "Render data whenever it is defined and show the error as a banner; fall back to the full-page error only when data is undefined.",
+   "evidence": "Read TodayPage: the isError branch returns before the isPending and data branches; TanStack v5 keeps data defined on a failed refetch."
+  },
+  {
+   "id": "F40,F41,F42",
+   "lane": "L4",
+   "severity": "major",
+   "where": "apps/web/src/pages/TodayPage.tsx:19-36, components/CoverageBlock.tsx:22, PipelineBlock.tsx:22",
+   "what": "No h1 anywhere (headings start at h2/h3), no role/aria-live on the loading and error regions, and progress bars are bare divs with an inline width only.",
+   "fix": "Add an h1 ('Today' plus the as-of timestamp), role=status/aria-live on loading and role=alert on errors, and role=progressbar with aria-valuenow/min/max and a label on both bars.",
+   "evidence": "grep -rn 'role=|aria-|<h1' apps/web/src returns no matches at all."
+  },
+  {
+   "id": "F43",
+   "lane": "L4",
+   "severity": "major",
+   "where": "apps/web/src/components/UpcomingTripsBlock.tsx:14,17; CoverageBlock.tsx:9; NeedsVisitBlock.tsx:15",
+   "what": "Empty-state and metadata text uses text-slate-400 (#94a3b8) on white, about 2.6:1 at 14px, below the WCAG AA 4.5:1 minimum for body text.",
+   "fix": "Use slate-600 or darker for empty-state and secondary text.",
+   "evidence": "Read the four components: every empty state and the timezone/periodKey spans carry text-slate-400 on the white page background."
+  },
+  {
+   "id": "F44",
+   "lane": "L4",
+   "severity": "major",
+   "where": "apps/web/src/pages/TodayPage.tsx:33-39",
+   "what": "sources: [] renders four zero tiles and nothing else, so an empty or fully failed config looks identical to a healthy zero day, and generatedAt is never shown.",
+   "fix": "Render an explicit 'No sources configured' state and show generatedAt as a visible 'as of' line in the header.",
+   "evidence": "Read TodayPage: TotalsHeader then data.sources.map with no empty branch; generatedAt is not referenced anywhere in apps/web/src."
+  },
+  {
+   "id": "F45",
+   "lane": "L4",
+   "severity": "major",
+   "where": "apps/web/src/main.tsx:9, pages/TodayPage.tsx:12",
+   "what": "refetchOnWindowFocus is false with no staleTime, no refetchInterval and no refresh control, so an open Today tab never updates.",
+   "fix": "Per the owner decision: 60s refetchInterval with 30s staleTime, plus a visible 'as of' timestamp in the header.",
+   "evidence": "main.tsx sets defaultOptions { refetchOnWindowFocus: false, retry: 1 } only; TodayPage's useQuery passes just queryKey and queryFn."
+  },
+  {
+   "id": "F23",
+   "lane": "L4",
+   "severity": "minor",
+   "where": "apps/web/src/lib/api.ts:20-21, main.tsx:9",
+   "what": "fetch is issued with no AbortSignal or timeout and the client retries once, so a slow /api/today hangs the page and doubles load on an already saturated 5-connection pool.",
+   "fix": "Pass AbortSignal.timeout(...) into apiGet/fetchToday and drop retry for this query.",
+   "evidence": "grep for AbortSignal or signal in apps/web/src/lib/api.ts returns no matches; retry: 1 is set in main.tsx."
+  },
+  {
+   "id": "F47",
+   "lane": "L4",
+   "severity": "minor",
+   "where": "apps/web/src/components/NeedsVisitBlock.tsx:35, e2e/today.spec.ts:25-29",
+   "what": "Up to 8 links per source share the accessible name 'Open in Pathfinder' (WCAG 2.4.4), and the e2e test selects it with .first(), so it pins row ordering rather than the intended row.",
+   "fix": "Give each link aria-label={`Open ${row.name} in Pathfinder`} and select the e2e link inside the needs-visit-row-48 testid.",
+   "evidence": "Read NeedsVisitBlock: the anchor text is a constant per row; e2e/today.spec.ts:28 calls .first() on getByRole('link', { name: 'Open in Pathfinder' })."
+  },
+  {
+   "id": "F49,F62",
+   "lane": "L4",
+   "severity": "minor",
+   "where": "apps/web/src/lib/api.ts:37-43, vite.config.ts:9, apps/web/src (no test)",
+   "what": "fetchSources/fetchHealth and queryKeys.sources/health have no consumers, the @web alias is unreferenced, and no test covers the page-level empty-sources state.",
+   "fix": "Delete the unused exports and the alias (or use it), and add a TodayPage test for sources: [] asserting the new empty-state element.",
+   "evidence": "grep across apps/web/src and e2e finds only the declarations of fetchSources/fetchHealth and no '@web/' import; no test file exists under apps/web."
+  },
+  {
+   "id": "F25,F50",
+   "lane": "L5",
+   "severity": "blocker",
+   "where": "docker-compose.yml:25, .env.example:17",
+   "what": "env_file supplies REPOS_API_HOST=127.0.0.1, so the API binds container loopback while Docker publishes to the container's bridge IP; the mapped port is refused and Caddy never reaches the API.",
+   "fix": "Per the owner decision, set REPOS_API_HOST=0.0.0.0 in the compose service environment only; the 127.0.0.1: host-side publish still restricts exposure.",
+   "evidence": "index.ts:26 defaults HOST to 127.0.0.1 and reads REPOS_API_HOST; .env.example:17 ships 127.0.0.1 and compose loads .env via env_file."
+  },
+  {
+   "id": "F52",
+   "lane": "L5",
+   "severity": "blocker",
+   "where": "docker-compose.yml:25",
+   "what": "The published mapping is '127.0.0.1:${REPOS_API_PORT:-3200}:3200' \u2014 the container side is hardcoded while the app listens on REPOS_API_PORT, and DEPLOY.md:62 invites changing that port.",
+   "fix": "Use '127.0.0.1:${REPOS_API_PORT:-3200}:${REPOS_API_PORT:-3200}' so both sides move together.",
+   "evidence": "Read the ports line verbatim; apps/api/src/index.ts:22 takes PORT from REPOS_API_PORT."
+  },
+  {
+   "id": "F53,F54",
+   "lane": "L5",
+   "severity": "major",
+   "where": "docker-compose.yml:1-27, Caddyfile.example:19, docs/DEPLOY.md:77",
+   "what": "The docs tell Caddy to serve apps/web/dist from the host, but the bundle exists only inside the image and nothing extracts it; the vite-preview fallback names a 'web' service and port 5173 that do not exist.",
+   "fix": "Add a named volume or bind mount for apps/web/dist (or document a docker cp / host build step), and either add a real web service with a published port or delete the fallback from both comment blocks.",
+   "evidence": "docker-compose.yml declares one service, api, with no volumes key and no 5173 publish; vite.config.ts:20 binds preview to 127.0.0.1."
+  },
+  {
+   "id": "F34,F55",
+   "lane": "L5",
+   "severity": "major",
+   "where": "docs/DEPLOY.md:58-65",
+   "what": "First-run step 2 never mentions REPOS_WEB_ORIGIN although the image sets NODE_ENV=production and the server throws at boot without it, so step 3 always fails.",
+   "fix": "Add REPOS_WEB_ORIGIN=https://repos.<tailnet>.ts.net to the DEPLOY.md fill-in list and correct .env.example's loopback default (INT owns .env.example).",
+   "evidence": "grep -rn REPOS_WEB_ORIGIN docs/ README.md returns nothing; server.ts:32-36 throws when it is unset and NODE_ENV==='production'."
+  },
+  {
+   "id": "F56,F57,F61",
+   "lane": "L5",
+   "severity": "major",
+   "where": "docs/REPOS_V1.md \u00a72.3, \u00a74, \u00a77, \u00a78; README.md:52",
+   "what": "\u00a77 lists eight criteria while README and the tests say nine; \u00a72.3 says a sources.json entry carries a read-only DATABASE_URL, contradicting \u00a76, CLAUDE.md and the code; \u00a74's field lists and \u00a78's sources.example.json are stale.",
+   "fix": "Sync \u00a72.3 (slug/name/kind/webUrl, credential in .env), regenerate \u00a74's lists from packages/shared/src/api.ts, add the ninth criterion from .orchestrator/state.md, and replace sources.example.json with sources.json.",
+   "evidence": "Counted \u00a77: exactly 8 numbered items; state.md line 76 says 'all nine criteria'; sources.json has no URL field; ls sources.example.json fails."
+  },
+  {
+   "id": "F58",
+   "lane": "L5",
+   "severity": "major",
+   "where": "README.md:54-55, docs/DEPLOY.md",
+   "what": "README points at DEPLOY.md for the fixture databases, but DEPLOY.md never mentions them; the real setup lives in test/fixtures/pathfinder/LOCAL_DB.md, which is excluded from the repo.",
+   "fix": "Add a fixture/test-database section to DEPLOY.md (or point README at test/fixtures/pathfinder/README.md) and commit a non-secret LOCAL_DB template.",
+   "evidence": "grep -i fixture docs/DEPLOY.md returns nothing; git ls-files shows test/fixtures/pathfinder/README.md but no LOCAL_DB.md."
+  },
+  {
+   "id": "F3,F29",
+   "lane": "L5",
+   "severity": "minor",
+   "where": "docs/REPOS_V1.md \u00a73-\u00a74 (totals.ts:51-55 vs upcomingTrips.ts:51, pool.ts:10)",
+   "what": "Two documented guarantees overstate the code: the 'Trips this week' tile is week-overlap any-status while the list is start_date >= today, and default_transaction_read_only is a session default, not a lock.",
+   "fix": "Per the owner decision, keep both behaviours and document them: state the two trip definitions in \u00a73/\u00a74, and describe the read-only session option as defense-in-depth behind the repos_reader grant.",
+   "evidence": "SET default_transaction_read_only = off through a RepOS pool succeeded (current_setting returned 'off'); the two trip predicates differ as quoted."
+  },
+  {
+   "id": "F30,F31",
+   "lane": "L5",
+   "severity": "minor",
+   "where": "docs/DEPLOY.md:31-37",
+   "what": "The grant recipe never revokes TEMP from PUBLIC, so repos_reader can CREATE TEMP TABLE, and ALTER DEFAULT PRIVILEGES silently grants SELECT on every future Pathfinder table, including one that may hold raw secrets.",
+   "fix": "Add REVOKE TEMP ON DATABASE <db> FROM PUBLIC, repos_reader, and either drop the default-privileges line in favour of per-table grants or gate it on the schema-coupling bump.",
+   "evidence": "As repos_reader on repos_test_lexington: CREATE TEMP TABLE t_probe(x int) succeeded and has_database_privilege(...,'TEMP') returned true."
+  },
+  {
+   "id": "F48",
+   "lane": "L5",
+   "severity": "minor",
+   "where": "Caddyfile.example:19-20",
+   "what": "file_server without try_files makes any deep link 404 before React loads, so App.tsx's catch-all redirect route is dead in the documented deploy.",
+   "fix": "Add `try_files {path} /index.html` to the static block (or reverse_proxy the preview server instead).",
+   "evidence": "grep -n try_files Caddyfile.example returns no matches; the static block is root + file_server only."
+  },
+  {
+   "id": "F16",
+   "lane": "INT",
+   "severity": "major",
+   "where": "apps/api/src/index.ts:30-31",
+   "what": "Number(env) yields NaN for a non-numeric value, and pg then drops BOTH bounds: the connect timeout falls back to 0 (disabled) and statement_timeout is never sent.",
+   "fix": "Validate both env numbers at boot with Number.isFinite(n) && n > 0 and refuse to start otherwise.",
+   "evidence": "node_modules/pg/lib/client.js:116 does `c.connectionTimeoutMillis || 0` then checks `> 0`; line 558 does `if (params.statement_timeout)` \u2014 NaN is falsy in both."
+  },
+  {
+   "id": "F19,F33",
+   "lane": "INT",
+   "severity": "minor",
+   "where": "apps/api/src/index.ts:57-65",
+   "what": "app.listen has no 'error' listener so EADDRINUSE becomes an uncaught exception, there is no SIGTERM/SIGINT handler, and the boot-failure catch sets exitCode without closing pools already opened.",
+   "fix": "Attach server.on('error'), add a SIGTERM/SIGINT handler that closes the server then factory.close(), and hoist the factory so the catch can close it.",
+   "evidence": "Read index.ts:56-65: listen takes only a callback; main().catch logs and sets process.exitCode with no close(); factory is scoped inside main()."
+  },
+  {
+   "id": "F32",
+   "lane": "INT",
+   "severity": "minor",
+   "where": "apps/api/src/server.ts:56-62",
+   "what": "The 500 handler returns errorMessage(err) as `detail` to unauthenticated callers; redaction strips only URL-shaped credentials, so hostnames, database names and relation names still reach the body.",
+   "fix": "Log the detail server-side and return a generic detail, or include detail only when NODE_ENV !== 'production'.",
+   "evidence": "Read server.ts:56-62; redact.ts:13 matches only scheme://...@host, so a plain 'relation \"x\" does not exist' passes through untouched."
+  },
+  {
+   "id": "F24b,F49b",
+   "lane": "INT",
+   "severity": "minor",
+   "where": ".env.example:26, apps/web/package.json:14-15",
+   "what": "The env template still ships VITE_API_BASE_URL=http://127.0.0.1:3200, which reintroduces the cross-origin base after the same-origin fix, and apps/web declares date-fns and date-fns-tz although only apps/api imports them.",
+   "fix": "Drop VITE_API_BASE_URL from .env.example (or document it as dev-only) and remove both date-fns packages from apps/web/package.json.",
+   "evidence": "grep for date-fns across apps/web/src and e2e returns nothing; the only import is apps/api/src/blocks/upcomingTrips.ts, and apps/api declares both itself."
+  },
+  {
+   "id": "F59,F60",
+   "lane": "INT",
+   "severity": "major",
+   "where": "playwright.config.ts:29, 41",
+   "what": "The Chromium executablePath defaults to a sandbox-only path with no fallback to Playwright's own resolution, and reuseExistingServer: !CI lets e2e reuse a dev API started from .env with real source credentials.",
+   "fix": "Fall back to Playwright's default resolution when REPOS_E2E_CHROMIUM_PATH is unset (documenting the override), and set reuseExistingServer: false for the API server or give e2e its own port.",
+   "evidence": "ls ~/.cache/ms-playwright fails (no such directory); the API webServer entry sets reuseExistingServer: !process.env.CI while the web entry sets false."
+  },
+  {
+   "id": "F62b",
+   "lane": "INT",
+   "severity": "minor",
+   "where": "apps/api/src/index.ts:19-59",
+   "what": "The whole API bootstrap is uncovered: no test imports index.ts, and REPOS_API_HOST is never exercised with a non-default value.",
+   "fix": "Extract host/port/timeout resolution into a small exported helper and unit-test it, including a non-default REPOS_API_HOST and a non-numeric timeout.",
+   "evidence": "grep -rn REPOS_API_HOST across .ts files returns only index.ts:26; no test file imports apps/api/src/index.ts."
+  }
+ ],
+ "refuted": [
+  {
+   "where": "F5 \u2014 apps/api/src/services/sourceContext.ts:19 (users.id = 1 hardcoded)",
+   "why": "Explicit owner decision in the brief: keep users.id = 1. Fixture confirms a single live user with id 1 in both databases, so no current source is affected."
+  },
+  {
+   "where": "F10 \u2014 claimed reproduction: 20 concurrent /api/today gave 5/20 responses with zeroed totals",
+   "why": "Did not reproduce: 20 concurrent GET /api/today against the healthy fixtures returned 20/20 HTTP 200 in ~0.15s with no error field. Only the acquire-timeout mechanism stands (accepted under F9,F10,F14)."
+  },
+  {
+   "where": "F1 \u2014 claim that the weekly and custom period_key conventions are unverified",
+   "why": "Partly refuted: vendored migrations 0025/0026 document '2026-W29' and '2026-07-21+6w#3', exactly what cyclePeriodKey emits. Only the #index base and ISO week-year edges remain unpinned."
+  },
+  {
+   "where": "F20 \u2014 claimed latencyMs 0 while /api/health took 6.0s",
+   "why": "Numbers not reproduced against a refused port: latencyMs was null for the unreachable source, 11ms for the live one, and the whole call took 0.03s. The exclusion of recheck/acquire cost is still real."
+  },
+  {
+   "where": "F13 \u2014 claim that a 'behind' source still yields health status 'ok'",
+   "why": "Narrower than stated: boot refuses a behind/unknown source, so this is reachable only via a recheck that settles into behind/unknown. Accepted on that path, not as a boot-time state."
+  }
+ ],
+ "deferred": [
+  {
+   "where": "packages/shared/src/cyclePeriod.ts vs Pathfinder's period-key writer",
+   "why": "Byte-for-byte confirmation needs a session in the Pathfinder repo; the brief's isolation rule forbids reading /home/user/reptech-pathfinder from here. Park as a Pathfinder-side check."
+  },
+  {
+   "where": "docs/DEPLOY.md \u2014 ALTER ROLE repos_reader SET default_transaction_read_only = on",
+   "why": "A server-side change on each source database, not a change to any file this repo owns; belongs in the ops runbook alongside the grant recipe."
+  },
+  {
+   "where": "playwright.config.ts \u2014 removing the sandbox Chromium path outright",
+   "why": "cdn.playwright.dev is blocked by sandbox egress, so the pinned path must stay as a fallback behind REPOS_E2E_CHROMIUM_PATH or e2e cannot launch in this environment."
+  },
+  {
+   "where": "docker-compose.yml / Caddyfile.example \u2014 end-to-end deploy proof",
+   "why": "No container runtime available in this sandbox, so F25/F52/F53 were verified from the exact config lines and the app's own bind/port logic rather than by running compose."
+  },
+  {
+   "where": "apps/web \u2014 rendered-page measurements (contrast ratio, h1 count, ARIA count)",
+   "why": "No browser available here; verified by reading the components and by grep (zero role/aria/h1 occurrences in apps/web/src), which is conclusive for presence but not for computed styles."
+  }
+ ],
+ "note": "63 findings merged to 40 lane-assigned entries; 23 ids folded into duplicates. Baseline green: typecheck, lint, 44/44 tests, exit 0. Started the API twice (fixtures, then closed port); both stopped. One NEW defect added as F8b: /api/sources returns meetingTypes id as a string while the contract says number. Owner decisions applied, not re-litigated."
+}

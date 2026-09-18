@@ -31,7 +31,7 @@ All commands run from `/home/user/RepOS`. Final acceptance (attempt 2): every cr
 
 ## Current phase
 
-`Run 2, R1 — five Opus review lenses (A data, B concurrency, C security, D web, E deploy/docs/tests), then R2 verifier`
+`Run 2, F — fix lanes (L3+L5, then L1+L2, then L4), then INT integrator, then A acceptance`. R1: A pass_with_fixes/9, B fail/14, C fail/12, D fail/14, E fail/14. R2: 63 raw → 40 accepted (L1 3, L2 9, L3 4, L4 10, L5 9, INT 5), 5 refuted, 5 deferred; see fix2-verified.json.
 
 ## Lane map
 
