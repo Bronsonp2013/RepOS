@@ -33,7 +33,7 @@ the sole input to the phase-7 acceptance worker. All commands run from `/home/us
 
 ## Current phase
 
-`2b — Contract review, then 3 — Implementation lanes`
+`3 — Implementation lanes (staged: sources+deploy-docs, blocks+web, routes) after contract-fix`
 
 ## Lane map
 
@@ -44,8 +44,8 @@ test/setup/**.
 | id | owns | may_read | status |
 |---|---|---|---|
 | sources | `packages/sources/src/{types,config,pool,schema}.ts`, `packages/sources/src/{readonly,schema,credentials}.test.ts` | shared, sources index, fixtures, sources.json | pending |
-| blocks | `apps/api/src/blocks/**`, `apps/api/src/today.test.ts` | shared, sources, server.ts, services, fixtures | pending |
-| routes | `apps/api/src/routes/**`, `apps/api/src/services/**`, `apps/api/src/index.ts`, `apps/api/src/{sources,degrade}.test.ts` | shared, sources, blocks, server.ts | pending |
+| blocks | `apps/api/src/blocks/**` incl. `today-blocks.test.ts` | shared, sources, server.ts, services, fixtures | pending |
+| routes | `apps/api/src/routes/**`, `apps/api/src/services/**`, `apps/api/src/index.ts`, `apps/api/src/{sources,degrade,today}.test.ts` | shared, sources, blocks, server.ts | pending |
 | web | `apps/web/src/**`, `apps/web/{index.html,vite.config.ts,tailwind.config.js,postcss.config.js}`, `e2e/**` | shared, playwright.config.ts | pending |
 | deploy-docs | `Dockerfile`, `docker-compose.yml`, `Caddyfile.example`, `docs/DEPLOY.md`, `README.md` | spec, package.json, .env.example | pending |
 
@@ -55,7 +55,8 @@ test/setup/**.
 |---|---|---|---|---|
 | scout-env | `recon:scout-env` | sonnet | 1 | pass (3 verifications exit 0) |
 | arch | `arch:arch` | opus | 1 | pass (typecheck 0, lint 0, web build 0; tests fail 'not implemented' by design) |
-| review-contracts | `review:contracts` | opus | 1 | running |
+| review-contracts | `review:contracts` | opus | 1 | fail: 3 blockers, 5 majors, 2 minors (all triaged into contract-fix and lane briefs) |
+| contract-fix | `fix:contracts` | sonnet | 1 | running |
 | lane-sources | `lane:sources` | sonnet | 1 | pending |
 | lane-blocks | `lane:blocks` | sonnet | 1 | pending |
 | lane-routes | `lane:routes` | sonnet | 1 | pending |
@@ -67,6 +68,7 @@ test/setup/**.
 | id | Question | Options | Status |
 |---|---|---|---|
 | D1 | Architect asks: Node 22 vs Pathfinder's 20; placeholder webUrls; API runs under tsx in prod; no Docker to verify image. | Resolved by orchestrator: 22, placeholders stay config, tsx matches Pathfinder, image unverified is a recorded degradation. | resolved |
+| D2 | Review blockers: fixture trip date past; totals block missing; test filter collision. | Fixed clock via BlockContext in tests; totals block added to blocks lane; lane verification commands made path-exact; criteria unchanged. | resolved |
 | D0 | Bronson said "proceed"; treated as run-unattended. Phase 1 and 2 gates become notifications. | — | assumed |
 
 ## Degradations
@@ -75,4 +77,5 @@ test/setup/**.
   (commit 028af48) to vendor migrations and lint configs into `test/fixtures/pathfinder/`. No later
   worker reads the sibling repo.
 - No Docker in the sandbox. Local PostgreSQL 16 is used instead; PostGIS installed via apt.
+- Lanes are staged, not one fan-out, because blocks and routes depend on sources and web's e2e depends on routes.
 - Gate commits are run by the orchestrator (a stop hook requires committed state each turn).
