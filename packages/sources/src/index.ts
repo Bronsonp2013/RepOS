@@ -3,3 +3,4 @@ export * from './types';
 export * from './config';
 export * from './pool';
 export * from './schema';
+export * from './redact';

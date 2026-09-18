@@ -69,7 +69,9 @@ export interface SourcePool {
  *
  * Implementations MUST append `options=-c default_transaction_read_only=on` to
  * every connection string (docs/REPOS_V1.md §4) so a write fails at the
- * database even if the role were ever over-granted, and MUST cap `max` at 5.
+ * database even if the role were ever over-granted, and MUST cap `max` at
+ * `MAX_POOL_CONNECTIONS_CEILING` (pool.ts). Callers with real per-source
+ * concurrency needs may pass a higher `options.max` than the default.
  */
 export interface SourcePoolFactory {
   /** Every source that was configured, in `sources.json` order. */

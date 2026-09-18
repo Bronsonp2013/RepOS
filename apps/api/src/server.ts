@@ -38,15 +38,26 @@ function resolveWebOrigin(): string | false {
   return `http://127.0.0.1:${webPort}`;
 }
 
-export function createServer(factory: SourcePoolFactory): Express {
+/** Options accepted by `createServer`. */
+export interface CreateServerOptions {
+  /**
+   * What `/api/today` treats as "now". Defaults to the wall clock. Tests
+   * inject a fixed instant here instead of a module-global override, so it
+   * can never be armed outside a test process (F21).
+   */
+  now?: () => Date;
+}
+
+export function createServer(factory: SourcePoolFactory, options: CreateServerOptions = {}): Express {
   const app = express();
+  const now = options.now ?? (() => new Date());
 
   app.use(helmet());
   app.use(cors({ origin: resolveWebOrigin(), methods: ['GET'] }));
 
   app.use('/api/sources', sourcesRouter(factory));
   app.use('/api/health', healthRouter(factory));
-  app.use('/api/today', todayRouter(factory));
+  app.use('/api/today', todayRouter(factory, now));
 
   app.use((_req, res) => {
     const body: ApiError = { error: 'not_found' };
@@ -54,9 +65,15 @@ export function createServer(factory: SourcePoolFactory): Express {
   });
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    // F32: only the server log gets the (redacted) detail; an unauthenticated
+    // caller gets a generic body in production, since redaction strips only
+    // URL-shaped credentials and a hostname, database or relation name could
+    // still reach the response otherwise.
+    const detail = errorMessage(err);
+    console.error('[repos-api] request failed:', detail);
     const body: ApiError = {
       error: 'internal_error',
-      detail: errorMessage(err),
+      ...(process.env.NODE_ENV !== 'production' ? { detail } : {}),
     };
     res.status(500).json(body);
   });

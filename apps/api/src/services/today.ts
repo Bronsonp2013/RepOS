@@ -19,22 +19,39 @@ const EMPTY_TOTALS: SourceTotals = {
   staleAccounts: 0,
 };
 
-// Test-only seam: today.test.ts pins `now` to a fixed instant so the Graham
-// trip (start_date 2026-07-08) reads as upcoming regardless of wall clock.
-// routes/today.ts reads `resolveNow()` instead of calling `new Date()` itself.
-let nowOverride: Date | null = null;
+// F21/F15: `now` is injected per request (createServer's `now` option,
+// threaded through routes/today.ts) instead of a module-global override, and
+// bounded per-source/per-request instead of unbounded. No module state here.
+const SOURCE_BUDGET_MS = Number(process.env.REPOS_TODAY_SOURCE_BUDGET_MS ?? 8000);
+const REQUEST_DEADLINE_MS = Number(process.env.REPOS_TODAY_REQUEST_DEADLINE_MS ?? 12000);
 
-/** Test-only: pin `now` for subsequent calls. Pass `null` to go back to the wall clock. */
-export function setNowOverrideForTests(now: Date | null): void {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('setNowOverrideForTests must not be called in production');
+const TIMED_OUT = Symbol('timed-out');
+
+/** Races `promise` against `ms`; resolves to `TIMED_OUT` instead of throwing/hanging. */
+async function withBudget<T>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout>;
+  const budget = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), ms);
+  });
+  try {
+    return await Promise.race([promise, budget]);
+  } finally {
+    clearTimeout(timer!);
   }
-  nowOverride = now;
 }
 
-/** What `routes/today.ts` treats as "now" for this request. */
-export function resolveNow(): Date {
-  return nowOverride ?? new Date();
+/** pg error codes that mean "connected fine, but this query is broken" (a schema/SQL bug), not an outage. */
+const QUERY_ERROR_CODES = new Set(['42703', '42P01']);
+
+type BlockFailureKind = 'query_error' | 'unreachable';
+
+function classifyBlockFailure(err: unknown): BlockFailureKind {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && QUERY_ERROR_CODES.has(code) ? 'query_error' : 'unreachable';
+}
+
+function formatBlockError(slug: string, kind: BlockFailureKind, detail: string): string {
+  return `source "${slug}" ${kind}: ${detail}`;
 }
 
 function degradedSource(config: SourcePool['config'], error: string): TodaySource {
@@ -67,39 +84,85 @@ async function buildOne(sourcePool: SourcePool, now: Date): Promise<TodaySource>
     );
   }
 
+  let timezone: string;
   try {
-    const timezone = await readTimezone(sourcePool.pool);
-    const ctx: BlockContext = {
-      slug: config.slug,
-      kind: config.kind,
-      webUrl: config.webUrl,
-      timezone,
-      now,
-    };
+    timezone = await readTimezone(sourcePool.pool);
+  } catch (err) {
+    const kind = classifyBlockFailure(err);
+    const detail = errorMessage(err);
+    if (kind === 'query_error') {
+      console.error(`[repos-api] ${formatBlockError(config.slug, kind, detail)}`);
+    }
+    return degradedSource(config, formatBlockError(config.slug, kind, detail));
+  }
 
-    const [needsVisitRows, upcomingTripRows, pipelineRows, coverageRows, sourceTotals] = await Promise.all([
+  const ctx: BlockContext = {
+    slug: config.slug,
+    kind: config.kind,
+    webUrl: config.webUrl,
+    timezone,
+    now,
+  };
+
+  // F9/F10/F14: each block settles independently under one per-source time
+  // budget (F15), rather than one Promise.all/try-catch where any single
+  // block error (a SQL typo, say) blanks the other four. The first
+  // rejection degrades the whole source (blocks are not independently
+  // renderable on the Today page), but its wording — and whether it's
+  // logged at error level — depends on whether it looks like a query bug
+  // (pg code 42703/42P01) versus the source being genuinely unreachable.
+  const settled = await withBudget(
+    Promise.allSettled([
       needsVisit(sourcePool.pool, ctx),
       upcomingTrips(sourcePool.pool, ctx),
       pipeline(sourcePool.pool, ctx),
       coverage(sourcePool.pool, ctx),
       totalsBlock(sourcePool.pool, ctx),
-    ]);
+    ]),
+    SOURCE_BUDGET_MS
+  );
 
-    return {
-      slug: config.slug,
-      name: config.name,
-      kind: config.kind,
-      webUrl: config.webUrl,
-      timezone,
-      needsVisit: needsVisitRows,
-      upcomingTrips: upcomingTripRows,
-      pipeline: pipelineRows,
-      coverage: coverageRows,
-      totals: sourceTotals,
-    };
-  } catch (err) {
-    return degradedSource(config, errorMessage(err));
+  if (settled === TIMED_OUT) {
+    return degradedSource(
+      config,
+      formatBlockError(config.slug, 'unreachable', `timed out after ${SOURCE_BUDGET_MS}ms`)
+    );
   }
+
+  const failure = settled.find(
+    (r): r is PromiseRejectedResult => r.status === 'rejected'
+  );
+  if (failure) {
+    const kind = classifyBlockFailure(failure.reason);
+    const detail = errorMessage(failure.reason);
+    if (kind === 'query_error') {
+      console.error(`[repos-api] ${formatBlockError(config.slug, kind, detail)}`);
+    }
+    return degradedSource(config, formatBlockError(config.slug, kind, detail));
+  }
+
+  const [needsVisitRows, upcomingTripRows, pipelineRows, coverageRows, sourceTotals] = settled.map(
+    (r) => (r as PromiseFulfilledResult<unknown>).value
+  ) as [
+    Awaited<ReturnType<typeof needsVisit>>,
+    Awaited<ReturnType<typeof upcomingTrips>>,
+    Awaited<ReturnType<typeof pipeline>>,
+    Awaited<ReturnType<typeof coverage>>,
+    Awaited<ReturnType<typeof totalsBlock>>
+  ];
+
+  return {
+    slug: config.slug,
+    name: config.name,
+    kind: config.kind,
+    webUrl: config.webUrl,
+    timezone,
+    needsVisit: needsVisitRows,
+    upcomingTrips: upcomingTripRows,
+    pipeline: pipelineRows,
+    coverage: coverageRows,
+    totals: sourceTotals,
+  };
 }
 
 /** One source's slice of Today, by slug. Throws if the slug isn't configured. */
@@ -125,7 +188,21 @@ function addTotals(a: TodayTotals, b: SourceTotals): TodayTotals {
 }
 
 export async function buildToday(factory: SourcePoolFactory, now: Date): Promise<TodayPayload> {
-  const sources = await Promise.all(factory.all().map((sourcePool) => buildOne(sourcePool, now)));
+  // F15: a request-level deadline backstops buildOne's own per-source
+  // budget — if a single source somehow still overruns it (e.g. budgets
+  // misconfigured), that source degrades instead of the whole request
+  // hanging past this bound.
+  const sources = await Promise.all(
+    factory.all().map(async (sourcePool) => {
+      const result = await withBudget(buildOne(sourcePool, now), REQUEST_DEADLINE_MS);
+      return result === TIMED_OUT
+        ? degradedSource(
+            sourcePool.config,
+            formatBlockError(sourcePool.config.slug, 'unreachable', `timed out after ${REQUEST_DEADLINE_MS}ms`)
+          )
+        : result;
+    })
+  );
 
   const totals = sources.reduce<TodayTotals>(
     (acc, source) => (source.error ? acc : addTotals(acc, source.totals)),
@@ -133,7 +210,9 @@ export async function buildToday(factory: SourcePoolFactory, now: Date): Promise
   );
 
   return {
-    generatedAt: new Date().toISOString(),
+    // F21: derived from the same `now` instant injected into buildOne,
+    // rather than a fresh `new Date()` call.
+    generatedAt: now.toISOString(),
     totals,
     sources,
   };

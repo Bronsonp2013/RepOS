@@ -19,7 +19,14 @@ export default function PipelineBlock({ rows }: { rows: PipelineRow[] }) {
                 <span className="text-slate-700">{row.label}</span>
                 <span className="font-medium text-slate-900">{row.prospectCount}</span>
               </a>
-              <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100">
+              <div
+                role="progressbar"
+                aria-valuenow={row.prospectCount}
+                aria-valuemin={0}
+                aria-valuemax={max}
+                aria-label={`${row.label} prospects`}
+                className="mt-1 h-1.5 w-full rounded-full bg-slate-100"
+              >
                 <div
                   className="h-1.5 rounded-full bg-blue-500"
                   style={{ width: `${(row.prospectCount / max) * 100}%` }}

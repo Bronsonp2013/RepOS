@@ -4,13 +4,19 @@
 # file, which owns its Postgres). Source credentials come from `.env`
 # (REPOS_SOURCE_<SLUG>_DATABASE_URL, see .env.example and docs/DEPLOY.md).
 #
-# The web bundle is built into the image at apps/web/dist. In the
-# recommended setup, Caddy serves that directory directly from the host (see
-# Caddyfile.example) and this compose file runs the API only. If you would
-# rather Caddy reverse-proxy a `vite preview` server instead of serving
-# static files, change `command` below to
-# `["npm", "run", "preview", "-w", "apps/web"]` and add `web:5173` to
-# Caddyfile.example's reverse_proxy line — see the comments there.
+# The web bundle is built into the image at apps/web/dist (see Dockerfile).
+# The `web-dist` named volume below is mounted over that same path in the
+# api container; on first `docker compose up`, Docker copies the image's
+# existing apps/web/dist content into the (empty) volume, so the built
+# bundle ends up on the host under the volume's data directory without a
+# separate build step. Point Caddy's `root` at that path — see
+# Caddyfile.example and docs/DEPLOY.md for how to find it.
+#
+# REPOS_API_HOST is forced to 0.0.0.0 here (in the compose environment only,
+# never in .env) so the API binds the container's bridge interface — the
+# `.env` default of 127.0.0.1 is for host/dev use and would make the API
+# unreachable through the published port. The `127.0.0.1:` prefix on the
+# port mapping below is what actually restricts exposure to the host itself.
 
 services:
   api:
@@ -21,6 +27,13 @@ services:
     command: ['npm', 'run', 'start', '-w', 'apps/api']
     env_file:
       - .env
+    environment:
+      - REPOS_API_HOST=0.0.0.0
     ports:
-      - '127.0.0.1:${REPOS_API_PORT:-3200}:3200'
+      - '127.0.0.1:${REPOS_API_PORT:-3200}:${REPOS_API_PORT:-3200}'
+    volumes:
+      - web-dist:/app/apps/web/dist
     restart: unless-stopped
+
+volumes:
+  web-dist:

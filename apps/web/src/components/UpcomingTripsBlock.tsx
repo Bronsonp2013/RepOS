@@ -11,10 +11,10 @@ export default function UpcomingTripsBlock({
   return (
     <div data-testid="block-upcoming-trips" className="p-4">
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Upcoming trips <span className="font-normal normal-case text-slate-400">({timezone})</span>
+        Upcoming trips <span className="font-normal normal-case text-slate-600">({timezone})</span>
       </h3>
       {rows.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-400">No trips scheduled.</p>
+        <p className="mt-2 text-sm text-slate-600">No trips scheduled.</p>
       ) : (
         <ul className="mt-2 space-y-3">
           {rows.map((trip) => (

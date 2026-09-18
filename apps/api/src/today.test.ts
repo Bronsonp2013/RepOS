@@ -16,10 +16,10 @@ import type { Express } from 'express';
 import type { SourcePoolFactory } from '@repos/sources';
 import { createSourcePools, loadSourceConfigs } from '@repos/sources';
 import { createServer } from './server';
-import { setNowOverrideForTests } from './services/today';
 
 // Fixed so the Graham trip (start_date 2026-07-08) reads as upcoming,
-// regardless of when the suite actually runs.
+// regardless of when the suite actually runs. Injected via createServer's
+// `now` option (F21) rather than a module-global override.
 const FIXED_NOW = new Date('2026-07-01T12:00:00Z');
 
 let factory: SourcePoolFactory;
@@ -28,12 +28,10 @@ let app: Express;
 beforeAll(async () => {
   const configs = await loadSourceConfigs();
   factory = await createSourcePools(configs);
-  app = createServer(factory);
-  setNowOverrideForTests(FIXED_NOW);
+  app = createServer(factory, { now: () => FIXED_NOW });
 });
 
 afterAll(async () => {
-  setNowOverrideForTests(null);
   await factory?.close();
 });
 

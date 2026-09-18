@@ -18,12 +18,22 @@ export function envVarForSlug(slug: string): string {
  * Rejects a string that looks like a connection string or a credential, so a
  * committed `sources.json` can never smuggle a secret in under a permitted
  * field name (CLAUDE.md hard rules: secrets in `.env`, never in `sources.json`).
+ *
+ * The `password|secret|token` keyword check only ever applies to `slug` and
+ * `webUrl`: those are the fields a real credential (or a scheme-qualified
+ * URL with embedded userinfo) could plausibly hide in. `name` is a free-text
+ * display string — a venture legitimately named e.g. "Token Furniture" must
+ * still load — so it is only checked for the connection-string shape and the
+ * `user:pass@host` userinfo pattern, never for the bare keywords.
  */
-function rejectCredentialShaped(value: string, field: string): void {
+function rejectCredentialShaped(value: string, field: string, checkKeywords: boolean): void {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value) && !/^https?:\/\//i.test(value)) {
     throw new Error(`sources.json: field "${field}" looks like a connection string, not a URL`);
   }
-  if (/password|secret|token|@.*:.*@/i.test(value)) {
+  if (/@.*:.*@/i.test(value)) {
+    throw new Error(`sources.json: field "${field}" looks credential-shaped`);
+  }
+  if (checkKeywords && /password|secret|token/i.test(value)) {
     throw new Error(`sources.json: field "${field}" looks credential-shaped`);
   }
 }
@@ -42,12 +52,13 @@ export function parseSourcesFile(raw: unknown): SourcesFile {
   const parsed = z.object({ sources: z.array(sourceEntrySchema) }).strict().parse(raw);
 
   for (const entry of parsed.sources) {
-    rejectCredentialShaped(entry.slug, 'slug');
-    rejectCredentialShaped(entry.name, 'name');
-    rejectCredentialShaped(entry.webUrl, 'webUrl');
+    rejectCredentialShaped(entry.slug, 'slug', true);
+    rejectCredentialShaped(entry.name, 'name', false);
+    rejectCredentialShaped(entry.webUrl, 'webUrl', true);
     if (!/^https?:\/\//i.test(entry.webUrl)) {
       throw new Error(`sources.json: entry "${entry.slug}" has a non-http(s) webUrl`);
     }
+    entry.webUrl = entry.webUrl.replace(/\/+$/, '');
   }
 
   const slugs = new Set<string>();

@@ -26,6 +26,23 @@
 --     so it counts toward neither eligible nor covered.
 --   - prospects id 1, 2: two live prospects, lexington DB only (the venture
 --     DB is never seeded — it stays the empty-instance fixture).
+--   - account 51: soft-deleted, with a trip_stop on trip 1 (sequence 2) —
+--     proves upcomingTrips' accounts JOIN drops a soft-deleted account's stop
+--     entirely rather than surfacing it with stale data (F2).
+--   - account 52: live, stage 'dormant' (not 'active'), never visited, no
+--     location — proves needsVisit surfaces a non-active-stage account the
+--     same as an active one (F7); it sorts second (NULLS FIRST, then by name,
+--     "Graham Interiors" < "TEST — ...").
+--   - account 53: live, one primary location, excluded from cycle 1 so its
+--     existing eligible/covered counts are unaffected; it is the sole
+--     eligible location for cycles 2 and 3 below (F1).
+--   - prospect_stages id 8: soft-deleted, with prospect id 3 pointed at it —
+--     proves totals.prospectsInPipeline (no stage-liveness filter) counts a
+--     prospect that pipeline.ts's stage-grouped breakdown silently drops (F4).
+--   - cycles id 2 (weekly), id 3 (custom, anchored 2026-06-01, every 2 weeks):
+--     both exclude every location except account 53's, so eligible=1,
+--     covered=0 for each — proves the weekly/custom period_key branches
+--     (untested previously; only cycle 1's 'monthly' branch was) (F1).
 -- =============================================================================
 
 BEGIN;
@@ -183,5 +200,135 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 SELECT setval(pg_get_serial_sequence('prospects', 'id'), (SELECT MAX(id) FROM prospects));
+
+-- account 51: soft-deleted, with a trip_stop on trip 1 (F2 — soft-deleted
+-- account stops must not appear in upcomingTrips).
+INSERT INTO accounts (id, name, account_type, account_stage_id, first_seen_at, deleted_at)
+OVERRIDING SYSTEM VALUE
+VALUES (
+    51,
+    'TEST — Soft-deleted Account',
+    'retail',
+    (SELECT id FROM account_stages WHERE key = 'active'),
+    NOW(),
+    NOW()
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO account_locations (account_id, label, city, state, geo, is_primary)
+SELECT 51, NULL, 'Plano', 'TX', NULL, TRUE
+WHERE NOT EXISTS (
+    SELECT 1 FROM account_locations WHERE account_id = 51 AND is_primary
+);
+
+INSERT INTO trip_stops (
+    id, trip_id, account_id, appointment_id, stop_date, sequence, location_id
+)
+OVERRIDING SYSTEM VALUE
+VALUES (
+    2,
+    1,
+    51,
+    NULL,
+    '2026-07-08',
+    2,
+    (SELECT id FROM account_locations WHERE account_id = 51 AND is_primary)
+)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('trip_stops', 'id'), (SELECT MAX(id) FROM trip_stops));
+
+-- account 52: live, stage 'dormant', never visited, no location (F7 —
+-- needsVisit does not filter by stage; a non-active-stage account sorts
+-- exactly where its last_visit_at puts it).
+INSERT INTO accounts (id, name, account_type, account_stage_id, first_seen_at)
+OVERRIDING SYSTEM VALUE
+VALUES (
+    52,
+    'TEST — Dormant Never Visited',
+    'retail',
+    (SELECT id FROM account_stages WHERE key = 'dormant'),
+    NOW()
+)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('accounts', 'id'), (SELECT MAX(id) FROM accounts));
+
+-- account 53: live, one primary location, dedicated to the weekly/custom
+-- coverage cycles below; explicitly excluded from cycle 1 so cycle 1's
+-- existing eligible/covered counts stay unchanged.
+-- last_visit_at is set (newer than account 50's) so this account does not
+-- also land in the needsVisit NULLS-FIRST group — it exists here only for
+-- the coverage cycles, not to affect needsVisit ordering.
+INSERT INTO accounts (id, name, account_type, account_stage_id, first_seen_at, last_visit_at)
+OVERRIDING SYSTEM VALUE
+VALUES (
+    53,
+    'TEST — Weekly/Custom Coverage Account',
+    'retail',
+    (SELECT id FROM account_stages WHERE key = 'active'),
+    NOW(),
+    '2026-06-25T12:00:00Z'
+)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('accounts', 'id'), (SELECT MAX(id) FROM accounts));
+
+INSERT INTO account_locations (account_id, label, city, state, geo, is_primary)
+SELECT 53, NULL, 'Frisco', 'TX', NULL, TRUE
+WHERE NOT EXISTS (
+    SELECT 1 FROM account_locations WHERE account_id = 53 AND is_primary
+);
+
+-- prospect_stages id 8: soft-deleted, with prospect id 3 pointed at it (F4).
+INSERT INTO prospect_stages (id, key, label, sort_order, deleted_at)
+OVERRIDING SYSTEM VALUE
+VALUES (8, 'test_deprecated', 'TEST — Deprecated Stage', 99, NOW())
+ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('prospect_stages', 'id'), (SELECT MAX(id) FROM prospect_stages));
+
+INSERT INTO prospects (id, company_name, city, state, prospect_stage_id)
+OVERRIDING SYSTEM VALUE
+VALUES (
+    3,
+    'TEST — Unstaged Prospect',
+    'Dallas',
+    'TX',
+    8
+)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('prospects', 'id'), (SELECT MAX(id) FROM prospects));
+
+-- cycles id 2 (weekly), id 3 (custom, anchored 2026-06-01, every 2 weeks).
+-- For the fixed test `now` (2026-07-01T12:00:00Z, America/Chicago):
+--   weekly  periodKey = '2026-W27'
+--   custom  periodKey = '2026-06-01+2w#2'
+INSERT INTO cycles (id, name, period, active)
+OVERRIDING SYSTEM VALUE
+VALUES (2, 'TEST — Weekly coverage cycle', 'weekly', TRUE)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO cycles (id, name, period, active, custom_every, custom_unit, anchored_on)
+OVERRIDING SYSTEM VALUE
+VALUES (3, 'TEST — Custom coverage cycle', 'custom', TRUE, 2, 'weeks', '2026-06-01')
+ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('cycles', 'id'), (SELECT MAX(id) FROM cycles));
+
+-- Exclude account 53's location from cycle 1, so cycle 1's eligible/covered
+-- counts (asserted elsewhere) are unaffected by its addition.
+INSERT INTO cycle_exclusions (cycle_id, location_id)
+SELECT 1, al.id FROM account_locations al
+WHERE al.account_id = 53 AND al.is_primary
+ON CONFLICT (cycle_id, location_id) WHERE deleted_at IS NULL DO NOTHING;
+
+-- Exclude every location except account 53's from cycles 2 and 3, so each
+-- has exactly one eligible location and zero covered (no cycle_progress
+-- rows reference them). Computed dynamically over whatever locations exist
+-- at this point in the file, so it stays correct as the fixture grows.
+INSERT INTO cycle_exclusions (cycle_id, location_id)
+SELECT 2, al.id FROM account_locations al
+WHERE al.id NOT IN (SELECT id FROM account_locations WHERE account_id = 53 AND is_primary)
+ON CONFLICT (cycle_id, location_id) WHERE deleted_at IS NULL DO NOTHING;
+INSERT INTO cycle_exclusions (cycle_id, location_id)
+SELECT 3, al.id FROM account_locations al
+WHERE al.id NOT IN (SELECT id FROM account_locations WHERE account_id = 53 AND is_primary)
+ON CONFLICT (cycle_id, location_id) WHERE deleted_at IS NULL DO NOTHING;
+SELECT setval(pg_get_serial_sequence('cycle_exclusions', 'id'), (SELECT MAX(id) FROM cycle_exclusions));
 
 COMMIT;

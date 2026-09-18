@@ -17,18 +17,7 @@
  */
 import type { Pool } from 'pg';
 import type { SchemaCheckResult } from './types';
-
-// Mirrors apps/api/src/services/redact.ts's CREDENTIAL_SHAPED regex. Kept
-// local (rather than imported) because packages/sources must not depend on
-// apps/api; a pg connection error occasionally echoes the connection string
-// it failed to use, and this is the last line of defense against that
-// leaking into a schema-check message (CLAUDE.md: no writable credential,
-// ever).
-const CREDENTIAL_SHAPED = /[a-z][a-z0-9+.-]*:\/\/[^\s]+@[^\s]+/gi;
-
-function redactMessage(message: string): string {
-  return message.replace(CREDENTIAL_SHAPED, '[redacted]');
-}
+import { redactCredentials } from './redact';
 
 /**
  * Postgres error codes that mean "connected fine, but this isn't a readable
@@ -132,7 +121,7 @@ export async function checkSourceSchema(slug: string, pool: Pool): Promise<Schem
     const applied = result.rows.map((row) => row.filename);
     return compareMigrations(slug, applied);
   } catch (err) {
-    const reason = redactMessage((err as Error).message);
+    const reason = redactCredentials((err as Error).message);
     if (isConnectionLevelFailure(err)) {
       return {
         slug,

@@ -33,8 +33,11 @@ databases), not logical (a `workspace_id` column).
    credential. Belt and braces: every RepOS connection also sets
    `default_transaction_read_only = on`.
 3. **Sources are configuration.** A venture is an entry in `sources.json`:
-   slug, name, kind (`territory` | `venture`), read-only `DATABASE_URL`, and
-   the instance's web URL for deep links. Adding a venture adds an entry.
+   slug, name, kind (`territory` | `venture`), and the instance's web URL
+   for deep links — never a credential (§6, CLAUDE.md hard rules). The
+   matching `repos_reader` connection string lives only in `.env`, as
+   `REPOS_SOURCE_<SLUG>_DATABASE_URL`. Adding a venture adds a `sources.json`
+   entry plus a `.env` credential.
 4. **Same stack as Pathfinder.** Node 22, TypeScript, Express, React + Vite,
    Tailwind, `pg`, TanStack Query. One toolchain, one set of conventions, and
    Pathfinder's `packages/shared` types can be reused where they match.
@@ -59,14 +62,18 @@ databases), not logical (a `workspace_id` column).
 One route, `/`. A header row across ventures, then one section per source.
 
 **Header (all ventures):** total active accounts, prospects in pipeline,
-trips this week, stale accounts (90+ days or never visited).
+trips this week, stale accounts (90+ days or never visited). "Trips this
+week" is any trip whose date range *overlaps* the current Mon–Sun week,
+regardless of status — a different, intentionally looser definition than
+the Upcoming trips block below, so a trip already in progress can count
+toward this total without appearing in that list (`apps/api/src/blocks/totals.ts`).
 
 **Per venture section:**
 
 | Block | Source query | Deep link |
 | --- | --- | --- |
 | Needs a visit | Accounts worst-first by `last_visit_at`, NULLS FIRST, top 8. Same ordering as Pathfinder's dashboard. | `{web}/accounts/{id}` |
-| Upcoming trips | Trips with `start_date >= today`, soonest first, with anchored appointments (account, rep-local time). | `{web}/trips/{id}` |
+| Upcoming trips | Trips with `start_date >= today`, soonest first, with anchored appointments (account, rep-local time). This is a stricter cut than the header's "Trips this week" total above: a trip already under way (`start_date < today`) counts toward that total but does not appear here. | `{web}/trips/{id}` |
 | Pipeline | Prospect count per `prospect_stages` row, in `sort_order`. | `{web}/prospects?stage={key}` |
 | Coverage | Per active cycle: covered / eligible locations this period, as a bar. | `{web}/cycles/{id}` |
 
@@ -81,9 +88,9 @@ Out of scope for V1: calendar, email, tasks, any write, any RepOS-native data.
 
 Express on its own port (`REPOS_API_PORT`, default 3200).
 
-- `GET /api/sources` → `[{ slug, name, kind, webUrl, schemaStatus }]`
-- `GET /api/today` → `{ generatedAt, totals, sources: [{ slug, needsVisit, upcomingTrips, pipeline, coverage }] }`
-- `GET /api/health` → per-source connectivity and migration check
+- `GET /api/sources` → `[{ slug, name, kind, webUrl, schemaStatus, extraMigrations, missingMigrations, timezone, meetingTypes }]`
+- `GET /api/today` → `{ generatedAt, totals, sources: [{ slug, name, kind, webUrl, timezone, needsVisit, upcomingTrips, pipeline, coverage, totals, error? }] }`
+- `GET /api/health` → `{ status, generatedAt, expectedMigration, sources: [{ slug, reachable, schemaStatus, latencyMs, error? }] }`
 
 The exact field list for all three payloads lives in
 `packages/shared/src/api.ts` (`SourceSummary`, `HealthReport`, `TodayPayload`).
@@ -131,11 +138,19 @@ GRANT CONNECT ON DATABASE pathfinder TO repos_reader;
 GRANT USAGE ON SCHEMA public TO repos_reader;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO repos_reader;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO repos_reader;
+REVOKE TEMP ON DATABASE pathfinder FROM PUBLIC, repos_reader;
 ```
 
 The `ALTER DEFAULT PRIVILEGES` line means tables Pathfinder adds later are
-readable without a follow-up grant. Verification: `INSERT` as `repos_reader`
-must fail with `permission denied`.
+readable without a follow-up grant. The `REVOKE TEMP` line closes the
+default `PUBLIC` grant that would otherwise let `repos_reader` (or any role)
+run `CREATE TEMP TABLE` on the database. Verification: `INSERT` as
+`repos_reader` must fail with `permission denied`.
+
+`default_transaction_read_only = on` (decision 2 above) is defense in
+depth on top of this role, not the enforcement mechanism itself — the
+enforcement is that `repos_reader` has no write privilege to fall back to
+even if a session ever ran without the option set.
 
 Credentials go in `.env` as `REPOS_SOURCE_<SLUG>_DATABASE_URL`, never in
 `sources.json`, which is committed.
@@ -162,6 +177,9 @@ Credentials go in `.env` as `REPOS_SOURCE_<SLUG>_DATABASE_URL`, never in
    refuses to start with a message naming the gap.
 8. Every "Open in Pathfinder" link lands on the right record in the right
    instance.
+9. No writable credential: `sources.json` contains no connection string; the
+   pool factory appends `default_transaction_read_only=on` to every
+   connection; `.env.example` documents `REPOS_SOURCE_<SLUG>_DATABASE_URL`.
 
 ---
 
@@ -169,7 +187,7 @@ Credentials go in `.env` as `REPOS_SOURCE_<SLUG>_DATABASE_URL`, never in
 
 | Commit | Files | Verify |
 | --- | --- | --- |
-| A | Monorepo skeleton: `apps/api`, `apps/web`, `packages/sources`, root scripts, `sources.example.json` | `npm run typecheck`, `npm run lint` clean |
+| A | Monorepo skeleton: `apps/api`, `apps/web`, `packages/sources`, root scripts, `sources.json` | `npm run typecheck`, `npm run lint` clean |
 | B | `packages/sources`: pool factory, read-only enforcement, schema check | Acceptance 2, 3, 7 |
 | C | `GET /api/sources`, `GET /api/health` | Acceptance 1 |
 | D | `GET /api/today` queries, one module per block | Unit tests on ordering, fixtures from Pathfinder's test helpers |

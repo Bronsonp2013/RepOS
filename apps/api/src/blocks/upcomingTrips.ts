@@ -113,6 +113,8 @@ export async function upcomingTrips(pool: Pool, ctx: BlockContext): Promise<Upco
       status: row.status,
       stopCount: tripStops.length,
       stops: tripStops,
+      // Built from the raw string id, not `tripId` above: `Number()` can
+      // round a bigint id above 2^53, which would 404 a deep link.
       href: `${ctx.webUrl}/trips/${row.trip_id}`,
     };
   });

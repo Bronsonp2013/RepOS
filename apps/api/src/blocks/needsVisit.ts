@@ -49,17 +49,18 @@ export async function needsVisit(pool: Pool, ctx: BlockContext): Promise<NeedsVi
   );
 
   return result.rows.map((row) => {
-    const accountId = Number(row.account_id);
     const lastVisitAt = row.last_visit_at;
     return {
-      accountId,
+      // `Number()` can round a bigint id above 2^53; the href is built from
+      // the raw string id below so a deep link never 404s on that account.
+      accountId: Number(row.account_id),
       name: row.name,
       accountType: row.account_type,
       city: row.city,
       state: row.state,
       lastVisitAt: lastVisitAt ? lastVisitAt.toISOString() : null,
       daysSinceVisit: daysSince(lastVisitAt, ctx.now),
-      href: `${ctx.webUrl}/accounts/${accountId}`,
+      href: `${ctx.webUrl}/accounts/${row.account_id}`,
     };
   });
 }

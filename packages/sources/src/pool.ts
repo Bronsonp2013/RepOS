@@ -3,14 +3,23 @@
  * string (docs/REPOS_V1.md §4).
  */
 import { Pool } from 'pg';
-import type { CreateSourcePools, SourceConfig, SourcePool, SourcePoolFactory } from './types';
+import type { CreateSourcePools, SourcePool } from './types';
 import { checkSourceSchema, assertSchemaUsable } from './schema';
+import { redactCredentials } from './redact';
 
 /** Appended to every connection so the server refuses writes in-session. */
 export const READ_ONLY_OPTION = 'options=-c default_transaction_read_only=on';
 
-/** Pool ceiling per source, per the spec. */
+/**
+ * Default pool ceiling per source. Callers with real concurrency needs
+ * (e.g. one request firing several block queries against the same source in
+ * parallel) should pass a higher `options.max` explicitly rather than rely
+ * on this default, which is sized for a single in-flight request.
+ */
 export const MAX_POOL_CONNECTIONS = 5;
+
+/** Hard upper bound on per-source `max`, independent of the default above. */
+export const MAX_POOL_CONNECTIONS_CEILING = 20;
 
 /** The `-c ...` clause carried in READ_ONLY_OPTION, without the `options=` key. */
 const READ_ONLY_CLAUSE = '-c default_transaction_read_only=on';
@@ -32,7 +41,7 @@ async function closeAll(pools: SourcePool[]): Promise<void> {
 }
 
 export const createSourcePools: CreateSourcePools = async (configs, options) => {
-  const max = Math.min(options?.max ?? MAX_POOL_CONNECTIONS, MAX_POOL_CONNECTIONS);
+  const max = Math.min(options?.max ?? MAX_POOL_CONNECTIONS, MAX_POOL_CONNECTIONS_CEILING);
   const sourcePools: SourcePool[] = [];
   const bySlug = new Map<string, SourcePool>();
 
@@ -49,7 +58,7 @@ export const createSourcePools: CreateSourcePools = async (configs, options) => 
       // An unhandled emitter error would crash the process, so this listener must
       // never throw and must never log the connection string.
       pool.on('error', (err) => {
-        console.error(`[sources] pool error for source "${config.slug}": ${(err as Error).message}`);
+        console.error(`[sources] pool error for source "${config.slug}": ${redactCredentials((err as Error).message)}`);
       });
 
       const schema = await checkSourceSchema(config.slug, pool);
@@ -70,8 +79,3 @@ export const createSourcePools: CreateSourcePools = async (configs, options) => 
     close: () => closeAll(sourcePools),
   };
 };
-
-/** Convenience wrapper used by the API bootstrap. */
-export async function createSourcePoolFactory(configs: SourceConfig[]): Promise<SourcePoolFactory> {
-  return createSourcePools(configs, { max: MAX_POOL_CONNECTIONS });
-}

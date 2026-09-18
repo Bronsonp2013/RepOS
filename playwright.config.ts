@@ -22,12 +22,13 @@ export default defineConfig({
     trace: 'retain-on-failure',
     // Outbound access to cdn.playwright.dev is blocked by sandbox egress
     // policy, so the newer browser revision @playwright/test wants cannot be
-    // downloaded. Use the Chromium build already present in the sandbox
-    // image instead of the one browsers.json names.
-    launchOptions: {
-      executablePath:
-        process.env.REPOS_E2E_CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-    },
+    // downloaded there; that sandbox sets REPOS_E2E_CHROMIUM_PATH to the
+    // Chromium build already present in the image. Anywhere else (no
+    // override set), fall back to Playwright's own resolution instead of
+    // that sandbox-only path, which would not exist.
+    launchOptions: process.env.REPOS_E2E_CHROMIUM_PATH
+      ? { executablePath: process.env.REPOS_E2E_CHROMIUM_PATH }
+      : {},
   },
   webServer: [
     {
@@ -38,7 +39,10 @@ export default defineConfig({
       // `npm run dev` port) — otherwise CORS would reject the built preview.
       command: 'npm run start -w apps/api',
       url: `http://127.0.0.1:${apiPort}/api/health`,
-      reuseExistingServer: !process.env.CI,
+      // Never reuse an existing process here: a leftover dev API would be
+      // running against .env's real source credentials rather than the
+      // fixture databases in .env.test this suite expects.
+      reuseExistingServer: false,
       timeout: 60_000,
       env: { ...process.env, REPOS_WEB_ORIGIN: webBaseUrl },
     },

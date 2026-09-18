@@ -49,10 +49,11 @@ server loads `.env` on its own; `apps/api` loads it explicitly in
 
 ## Status
 
-V1 was built and accepted on 2026-09-18 against the nine acceptance criteria
-in `docs/REPOS_V1.md` §7, all passing: typecheck, lint, 44 tests, web build,
-and Playwright e2e. The API and web app run locally against the fixture
-databases described in `docs/DEPLOY.md`. What remains before real use: create
-the `repos_reader` role on the Lexington database, stand up the second
-Pathfinder instance, set real `webUrl` values in `sources.json`, and deploy
-per `docs/DEPLOY.md`.
+V1 reviewed and remediated; awaiting acceptance. Built against the nine
+acceptance criteria in `docs/REPOS_V1.md` §7; a code review found issues
+across all five lanes' work, which have now been fixed, and typecheck,
+lint, tests, web build, and Playwright e2e all pass again. The API and web
+app run locally against the fixture databases described in
+`docs/DEPLOY.md`. What remains before real use: create the `repos_reader`
+role on the Lexington database, stand up the second Pathfinder instance, set
+real `webUrl` values in `sources.json`, and deploy per `docs/DEPLOY.md`.

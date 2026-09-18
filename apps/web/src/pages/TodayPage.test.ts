@@ -170,4 +170,17 @@ describe('TodayPage', () => {
     expect(html).toContain('network unreachable');
     expect(html).not.toContain('data-testid="today-loading"');
   });
+
+  it('renders an explicit empty state when no sources are configured, not zero tiles alone', () => {
+    const payload: TodayPayload = {
+      generatedAt: '2026-09-18T12:00:00.000Z',
+      totals: { activeAccounts: 0, prospectsInPipeline: 0, tripsThisWeek: 0, staleAccounts: 0 },
+      sources: [],
+    };
+
+    const html = renderWithPayload(payload);
+
+    expect(html).toContain('data-testid="today-no-sources"');
+    expect(html).not.toContain('data-testid="source-');
+  });
 });

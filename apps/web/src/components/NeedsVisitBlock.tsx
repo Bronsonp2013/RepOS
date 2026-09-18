@@ -11,7 +11,7 @@ export default function NeedsVisitBlock({ rows }: { rows: NeedsVisitRow[] }) {
         Needs a visit
       </h3>
       {rows.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-400">Nothing due.</p>
+        <p className="mt-2 text-sm text-slate-600">Nothing due.</p>
       ) : (
         <ul className="mt-2 divide-y divide-slate-100">
           {rows.map((row) => (
@@ -30,6 +30,7 @@ export default function NeedsVisitBlock({ rows }: { rows: NeedsVisitRow[] }) {
               </div>
               <a
                 href={row.href}
+                aria-label={`Open ${row.name} in Pathfinder`}
                 className="shrink-0 text-sm font-medium text-blue-600 hover:underline"
               >
                 Open in Pathfinder

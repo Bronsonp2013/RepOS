@@ -23,9 +23,8 @@ test.describe('Today page (C8)', () => {
     await expect(row).toBeVisible();
 
     const link = page
-      .getByTestId('source-lexington')
-      .getByRole('link', { name: 'Open in Pathfinder' })
-      .first();
+      .getByTestId('needs-visit-row-48')
+      .getByRole('link', { name: 'Open Graham Interiors in Pathfinder' });
     await expect(link).toHaveAttribute('href', `${LEXINGTON_WEB_URL}/accounts/48`);
   });
 });

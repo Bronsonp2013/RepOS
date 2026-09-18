@@ -5,10 +5,17 @@
  */
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
+import type { Server } from 'node:http';
 import dotenv from 'dotenv';
-import { createSourcePools, loadSourceConfigs, MAX_POOL_CONNECTIONS } from '@repos/sources';
+import {
+  createSourcePools,
+  loadSourceConfigs,
+  MAX_POOL_CONNECTIONS,
+  type SourcePoolFactory,
+} from '@repos/sources';
 import { createServer } from './server';
 import { errorMessage } from './services/redact';
+import { resolveBootConfig } from './bootConfig';
 
 // Resolved from this file's location, not process.cwd(), so `.env` and
 // `sources.json` (both at the repo root) are found the same way whether the
@@ -19,44 +26,73 @@ import { errorMessage } from './services/redact';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 dotenv.config({ path: resolve(REPO_ROOT, '.env') });
 
-const PORT = Number(process.env.REPOS_API_PORT ?? 3200);
-
-// Tailnet-only: bind to loopback unless the environment names a different
-// host explicitly (docs/REPOS_V1.md §2.6, .env.example).
-const HOST = process.env.REPOS_API_HOST ?? '127.0.0.1';
-
-// Bounded so a source whose connection is refused can't hang a boot or a
-// request past a short, known wait (docs/REPOS_V1.md §7.6).
-const CONNECTION_TIMEOUT_MS = Number(process.env.REPOS_DB_CONNECT_TIMEOUT_MS ?? 3000);
-const STATEMENT_TIMEOUT_MS = Number(process.env.REPOS_DB_STATEMENT_TIMEOUT_MS ?? 10_000);
-
 export async function main(): Promise<void> {
-  const configs = await loadSourceConfigs({ configPath: resolve(REPO_ROOT, 'sources.json') });
-  const factory = await createSourcePools(configs, {
-    max: MAX_POOL_CONNECTIONS,
-    connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
-    statementTimeoutMillis: STATEMENT_TIMEOUT_MS,
-  });
+  const { port, host, connectionTimeoutMs, statementTimeoutMs } = resolveBootConfig(process.env);
 
-  for (const sourcePool of factory.all()) {
-    if (sourcePool.schema.status === 'ahead') {
-      console.warn(
-        `[repos-api] ${sourcePool.schema.message ?? `source "${sourcePool.config.slug}" schema is ahead`}`
-      );
+  // Hoisted so the boot-failure catch below and the shutdown handlers can
+  // both close whatever pools ended up open, rather than leaking them
+  // (F19/F33).
+  let factory: SourcePoolFactory | undefined;
+
+  let server: Server;
+  try {
+    const configs = await loadSourceConfigs({ configPath: resolve(REPO_ROOT, 'sources.json') });
+    factory = await createSourcePools(configs, {
+      max: MAX_POOL_CONNECTIONS,
+      connectionTimeoutMillis: connectionTimeoutMs,
+      statementTimeoutMillis: statementTimeoutMs,
+    });
+
+    for (const sourcePool of factory.all()) {
+      if (sourcePool.schema.status === 'ahead') {
+        console.warn(
+          `[repos-api] ${sourcePool.schema.message ?? `source "${sourcePool.config.slug}" schema is ahead`}`
+        );
+      }
+      if (sourcePool.schema.status === 'unreachable') {
+        // Not fatal (docs/REPOS_V1.md decision 5): boot proceeds with this
+        // source marked degraded, and it is re-checked per request.
+        console.warn(
+          `[repos-api] ${sourcePool.schema.message ?? `source "${sourcePool.config.slug}" is unreachable`} — booting degraded`
+        );
+      }
     }
-    if (sourcePool.schema.status === 'unreachable') {
-      // Not fatal (docs/REPOS_V1.md decision 5): boot proceeds with this
-      // source marked degraded, and it is re-checked per request.
-      console.warn(
-        `[repos-api] ${sourcePool.schema.message ?? `source "${sourcePool.config.slug}" is unreachable`} — booting degraded`
-      );
-    }
+
+    const app = createServer(factory);
+    server = app.listen(port, host, () => {
+      console.log(`[repos-api] listening on ${host}:${port}`);
+    });
+  } catch (err) {
+    // A pool was opened before the failure (e.g. createServer's CORS-origin
+    // check throwing) — close it rather than leaking the connections.
+    await factory?.close();
+    throw err;
   }
 
-  const app = createServer(factory);
-  app.listen(PORT, HOST, () => {
-    console.log(`[repos-api] listening on ${HOST}:${PORT}`);
+  // Without this, a bind failure (e.g. EADDRINUSE) throws asynchronously
+  // with no listener and crashes the process with an unhandled exception
+  // instead of a clean, logged exit (F19/F33).
+  server.on('error', (err: unknown) => {
+    console.error('[repos-api] server error:', errorMessage(err));
+    process.exitCode = 1;
+    void factory?.close();
   });
+
+  let shuttingDown = false;
+  const shutdown = (signal: NodeJS.Signals): void => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    console.log(`[repos-api] received ${signal}, shutting down`);
+    server.close(() => {
+      void factory?.close().finally(() => {
+        process.exit(0);
+      });
+    });
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 main().catch((err: unknown) => {

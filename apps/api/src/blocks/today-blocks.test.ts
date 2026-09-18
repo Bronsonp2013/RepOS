@@ -7,7 +7,11 @@
  * (seed-graham.sql: account 48 "Graham Interiors", appointment id 1 at
  * 2026-07-08 19:00Z, trip id 1 with one stop) via a real read-only pool from
  * @repos/sources. `now` is fixed at 2026-07-01T12:00:00Z so the Graham trip
- * (start_date 2026-07-08) counts as upcoming.
+ * (start_date 2026-07-08) counts as upcoming. See seed-graham.sql's header
+ * for accounts 51-53, prospect_stages id 8 and cycles 2-3, added to cover
+ * previously-untested paths (weekly/custom period_key, a soft-deleted
+ * account's trip stop, an unstaged/deprecated-stage prospect, a
+ * non-active-stage never-visited account).
  * Selected by: npm test -- today-blocks
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -49,10 +53,12 @@ describe('Today blocks (unit)', () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.length).toBeLessThanOrEqual(8);
 
-    // Seeded fixture has exactly three accounts: 48 (never visited), 49
-    // (visited 2026-01-15, older), 50 (visited 2026-06-20, newer). Worst-first
-    // with NULLS FIRST puts 48 ahead of both, then 49 ahead of 50.
-    expect(rows.map((r) => r.accountId)).toEqual([48, 49, 50]);
+    // Seeded fixture's top 5 live accounts, worst-first, NULLS FIRST:
+    // 48 (never visited), 52 (never visited, stage 'dormant' — NULLS group
+    // orders by name after 48), 49 (visited 2026-01-15), 50 (visited
+    // 2026-06-20), 53 (visited 2026-06-25). Account 51 is soft-deleted and
+    // never appears (F2's sibling case for this block).
+    expect(rows.map((r) => r.accountId)).toEqual([48, 52, 49, 50, 53]);
 
     const graham = rows.find((r) => r.accountId === 48);
     expect(graham).toMatchObject({
@@ -63,6 +69,23 @@ describe('Today blocks (unit)', () => {
       lastVisitAt: null,
       daysSinceVisit: null,
       href: 'http://pathfinder.local:3000/accounts/48',
+    });
+  });
+
+  it('needsVisit surfaces a non-active-stage never-visited account like any other (F7)', async () => {
+    const lexington = factory.get('lexington');
+    const ctx = ctxFor('lexington', 'http://pathfinder.local:3000');
+
+    const rows = await needsVisit(lexington!.pool, ctx);
+
+    // Account 52 is stage 'dormant', not 'active'; needsVisit has no stage
+    // filter, so it is ordered purely by last_visit_at like account 48.
+    const dormant = rows.find((r) => r.accountId === 52);
+    expect(dormant).toMatchObject({
+      name: 'TEST — Dormant Never Visited',
+      lastVisitAt: null,
+      daysSinceVisit: null,
+      href: 'http://pathfinder.local:3000/accounts/52',
     });
   });
 
@@ -99,6 +122,20 @@ describe('Today blocks (unit)', () => {
     }
   });
 
+  it('upcomingTrips drops a stop whose account is soft-deleted (F2)', async () => {
+    const lexington = factory.get('lexington');
+    const ctx = ctxFor('lexington', 'http://pathfinder.local:3000');
+
+    const rows = await upcomingTrips(lexington!.pool, ctx);
+
+    // Trip 1 also has a stop (id 2) for account 51, which is soft-deleted.
+    // The stops query's accounts JOIN filters that row out entirely, so it
+    // must not surface here even though the trip_stops row itself exists.
+    const graham = rows.find((t) => t.tripId === 1);
+    expect(graham!.stopCount).toBe(1);
+    expect(graham!.stops.some((s) => s.accountId === 51)).toBe(false);
+  });
+
   it('upcomingTrips would exclude the Graham trip once `now` moves past its start date', async () => {
     const lexington = factory.get('lexington');
     const ctx: BlockContext = {
@@ -128,6 +165,13 @@ describe('Today blocks (unit)', () => {
     for (const row of rows) {
       expect(row.prospectCount).toBeGreaterThanOrEqual(0);
     }
+
+    // Prospect id 3 points at prospect_stages id 8, which is soft-deleted.
+    // pipeline.ts's WHERE ps.deleted_at IS NULL drops that stage's group
+    // entirely, so this prospect contributes to no row here — see the
+    // matching totals.ts assertion (F4) for the mismatch this leaves.
+    const pipelineTotal = rows.reduce((sum, r) => sum + r.prospectCount, 0);
+    expect(pipelineTotal).toBe(2);
   });
 
   it('coverage computes covered vs eligible per active cycle for the current period', async () => {
@@ -141,8 +185,13 @@ describe('Today blocks (unit)', () => {
     // three seeded accounts' primary locations (48, 49, 50) minus the one
     // cycle_exclusions row for 49's location, = 2. Covered: cycle_progress
     // covers 48's location for '2026-07', = 1.
-    expect(rows.length).toBe(1);
-    const cycle = rows[0];
+    // Fixture also seeds an active weekly cycle (id 2) and an active custom
+    // cycle (id 3, every 2 weeks from anchor 2026-06-01), each with exactly
+    // one eligible location (account 53's) and zero covered (F1 — the
+    // weekly/custom period_key branches were previously untested; only
+    // cycle 1's 'monthly' branch was exercised).
+    expect(rows.length).toBe(3);
+    const cycle = rows.find((r) => r.cycleId === 1);
     expect(cycle).toMatchObject({
       cycleId: 1,
       name: 'TEST — Coverage cycle',
@@ -152,6 +201,28 @@ describe('Today blocks (unit)', () => {
       coveredLocations: 1,
       ratio: 0.5,
       href: 'http://pathfinder.local:3000/cycles/1',
+    });
+
+    const weekly = rows.find((r) => r.cycleId === 2);
+    expect(weekly).toMatchObject({
+      name: 'TEST — Weekly coverage cycle',
+      period: 'weekly',
+      periodKey: '2026-W27',
+      eligibleLocations: 1,
+      coveredLocations: 0,
+      ratio: 0,
+      href: 'http://pathfinder.local:3000/cycles/2',
+    });
+
+    const custom = rows.find((r) => r.cycleId === 3);
+    expect(custom).toMatchObject({
+      name: 'TEST — Custom coverage cycle',
+      period: 'custom',
+      periodKey: '2026-06-01+2w#2',
+      eligibleLocations: 1,
+      coveredLocations: 0,
+      ratio: 0,
+      href: 'http://pathfinder.local:3000/cycles/3',
     });
   });
 
@@ -167,5 +238,11 @@ describe('Today blocks (unit)', () => {
     expect(result.staleAccounts).toBeGreaterThanOrEqual(1);
     expect(result.tripsThisWeek).toBe(0);
     expect(result.prospectsInPipeline).toBeGreaterThanOrEqual(0);
+
+    // Fixture seeds 3 live, non-archived prospects (ids 1, 2, 3), the third
+    // pointed at a soft-deleted prospect_stages row (id 8). totals.ts has no
+    // stage-liveness filter, so it counts all 3 — one more than pipeline.ts's
+    // stage-grouped breakdown sums to (F4, previously untested).
+    expect(result.prospectsInPipeline).toBe(3);
   });
 });

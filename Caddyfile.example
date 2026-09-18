@@ -1,9 +1,11 @@
 # Example Caddyfile for RepOS on the tailnet (docs/REPOS_V1.md §2 decision 6:
 # private network only in V1, never a public URL). Copy to Caddyfile on the
 # NAS, fill in the real tailnet hostname, and point `root` at the built web
-# bundle produced by `npm run build -w apps/web` (apps/web/dist), or swap the
-# `file_server` block below for a reverse_proxy to the `web` service if you
-# run the image's `vite preview` mode instead (see docker-compose.yml).
+# bundle. `docker compose up -d` builds it into the `web-dist` named volume
+# (docker-compose.yml); find its host path with:
+#   docker volume inspect <project>_web-dist --format '{{ .Mountpoint }}'
+# (<project> is the compose project name, the repo directory name by
+# default) and use that path below — see docs/DEPLOY.md step 4.
 
 repos.<your-tailnet-name>.ts.net {
     # Security headers for the same-origin SPA. No external script/style/
@@ -15,9 +17,11 @@ repos.<your-tailnet-name>.ts.net {
         X-Content-Type-Options "nosniff"
     }
 
-    # Static web bundle.
-    root * /path/to/repos/apps/web/dist
+    # Static web bundle. Replace with the `web-dist` volume's Mountpoint
+    # (see the header comment above).
+    root * /path/to/repos_web-dist/_data
     file_server
+    try_files {path} /index.html
 
     # RepOS API. Matches REPOS_API_PORT in .env (default 3200).
     handle /api/* {
