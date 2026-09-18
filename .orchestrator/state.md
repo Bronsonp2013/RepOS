@@ -33,7 +33,7 @@ the sole input to the phase-7 acceptance worker. All commands run from `/home/us
 
 ## Current phase
 
-`4 — Integration, then 5 — Adversarial review`
+`6 — Remediation (round 1 of max 2), then integrate-2, then 7 — Acceptance`
 
 ## Lane map
 
@@ -62,8 +62,13 @@ test/setup/**.
 | lane-routes | `lane:routes` | sonnet | 1 | pass (3 exits 0; full suite 35 tests) |
 | lane-web | `lane:web` | sonnet | 1 | partial: all green except e2e, which ran before routes existed; integrator re-runs |
 | lane-deploy-docs | `lane:deploy-docs` | sonnet | 1 | pass (2 exits 0; image not built, no Docker) |
-| integrate | `integrate` | sonnet | 1 | running |
-| review-correctness / review-criteria / review-security | `review:*` | opus | 1 | queued behind integrate |
+| integrate | `integrate` | sonnet | 1 | pass (6 exits 0, commit 15eb575) |
+| review-correctness | `review:correctness` | opus | 1 | fail: 2 blockers (web error state unreachable; no pool error listener), 5 majors, 3 minors |
+| review-criteria | `review:criteria` | opus | 1 | pass_with_fixes: all C1-C9 commands exit 0; 5 majors on vacuous tests and an unredacted 500, 5 minors |
+| review-security | `review:security` | opus | 2 (attempt 1 died on schema length) | fail: 2 blockers (CORS *, no .dockerignore), 3 majors (500 handler, listen 0.0.0.0, compose ports), 4 minors |
+| fix-sources / fix-blocks / fix-api / fix-tests / fix-web / fix-deploy | `fix:*` | sonnet | 1 | running (all 28 findings in scope, grouped file-disjoint) |
+| integrate-2 | `integrate-2` | sonnet | 1 | queued |
+| accept | `accept` | opus | 1 | queued |
 
 ## Open decisions
 
@@ -71,6 +76,7 @@ test/setup/**.
 |---|---|---|---|
 | D1 | Architect asks: Node 22 vs Pathfinder's 20; placeholder webUrls; API runs under tsx in prod; no Docker to verify image. | Resolved by orchestrator: 22, placeholders stay config, tsx matches Pathfinder, image unverified is a recorded degradation. | resolved |
 | D2 | Review blockers: fixture trip date past; totals block missing; test filter collision. | Fixed clock via BlockContext in tests; totals block added to blocks lane; lane verification commands made path-exact; criteria unchanged. | resolved |
+| D3 | Finding triage (decision 3): all 28 findings from three reviewers are in scope; none deferred. | Six file-disjoint fix groups. | resolved |
 | D0 | Bronson said "proceed"; treated as run-unattended. Phase 1 and 2 gates become notifications. | — | assumed |
 
 ## Degradations
