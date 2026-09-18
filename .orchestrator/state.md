@@ -33,23 +33,40 @@ the sole input to the phase-7 acceptance worker. All commands run from `/home/us
 
 ## Current phase
 
-`2 — Architecture and contracts`
+`2b — Contract review, then 3 — Implementation lanes`
 
 ## Lane map
 
-Not yet produced.
+Phase-2 output (commit 4cae02f). Shared files belong to no lane: package.json files,
+package-lock.json, index.ts barrels, apps/api/src/server.ts, root configs, sources.json, .env*,
+test/setup/**.
+
+| id | owns | may_read | status |
+|---|---|---|---|
+| sources | `packages/sources/src/{types,config,pool,schema}.ts`, `packages/sources/src/{readonly,schema,credentials}.test.ts` | shared, sources index, fixtures, sources.json | pending |
+| blocks | `apps/api/src/blocks/**`, `apps/api/src/today.test.ts` | shared, sources, server.ts, services, fixtures | pending |
+| routes | `apps/api/src/routes/**`, `apps/api/src/services/**`, `apps/api/src/index.ts`, `apps/api/src/{sources,degrade}.test.ts` | shared, sources, blocks, server.ts | pending |
+| web | `apps/web/src/**`, `apps/web/{index.html,vite.config.ts,tailwind.config.js,postcss.config.js}`, `e2e/**` | shared, playwright.config.ts | pending |
+| deploy-docs | `Dockerfile`, `docker-compose.yml`, `Caddyfile.example`, `docs/DEPLOY.md`, `README.md` | spec, package.json, .env.example | pending |
 
 ## Tasks
 
 | task_id | label | model | attempt | verdict |
 |---|---|---|---|---|
 | scout-env | `recon:scout-env` | sonnet | 1 | pass (3 verifications exit 0) |
-| arch | `arch:arch` | opus | 1 | running |
+| arch | `arch:arch` | opus | 1 | pass (typecheck 0, lint 0, web build 0; tests fail 'not implemented' by design) |
+| review-contracts | `review:contracts` | opus | 1 | running |
+| lane-sources | `lane:sources` | sonnet | 1 | pending |
+| lane-blocks | `lane:blocks` | sonnet | 1 | pending |
+| lane-routes | `lane:routes` | sonnet | 1 | pending |
+| lane-web | `lane:web` | sonnet | 1 | pending |
+| lane-deploy-docs | `lane:deploy-docs` | sonnet | 1 | pending |
 
 ## Open decisions
 
 | id | Question | Options | Status |
 |---|---|---|---|
+| D1 | Architect asks: Node 22 vs Pathfinder's 20; placeholder webUrls; API runs under tsx in prod; no Docker to verify image. | Resolved by orchestrator: 22, placeholders stay config, tsx matches Pathfinder, image unverified is a recorded degradation. | resolved |
 | D0 | Bronson said "proceed"; treated as run-unattended. Phase 1 and 2 gates become notifications. | — | assumed |
 
 ## Degradations
