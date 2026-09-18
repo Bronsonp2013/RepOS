@@ -81,6 +81,12 @@ Express on its own port (`REPOS_API_PORT`, default 3200).
 - `GET /api/today` → `{ generatedAt, totals, sources: [{ slug, needsVisit, upcomingTrips, pipeline, coverage }] }`
 - `GET /api/health` → per-source connectivity and migration check
 
+The exact field list for all three payloads lives in
+`packages/shared/src/api.ts` (`SourceSummary`, `HealthReport`, `TodayPayload`).
+That file is the contract: apps/web and apps/api share it and nothing else. A
+source that cannot be read still appears in `/api/today` with `error` set and
+its four block arrays empty, so one dead venture never fails the page.
+
 One `pg.Pool` per source, `max: 5`, created from `sources.json` at boot. The
 pool factory is the only place a connection string is read, and it appends
 `options=-c default_transaction_read_only=on`. A write attempted through any

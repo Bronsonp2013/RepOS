@@ -37,4 +37,8 @@ role. See `docs/REPOS_V1.md` §3 and §6.
 
 ## Status
 
-Spec committed. No code yet. Next: Session brief Step 0.
+Skeleton committed: npm-workspaces monorepo (`apps/api`, `apps/web`,
+`packages/shared`, `packages/sources`), API and web contracts, and the test
+scaffolding for acceptance criteria C1-C9. `npm run typecheck` and
+`npm run lint` pass; every test file exists and fails with `not implemented`.
+Next: the implementation lanes (build order B-F in `docs/REPOS_V1.md` §8).

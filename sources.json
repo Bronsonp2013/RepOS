@@ -1,0 +1,16 @@
+{
+  "sources": [
+    {
+      "slug": "lexington",
+      "name": "Lexington Home Brands",
+      "kind": "territory",
+      "webUrl": "http://pathfinder.local:3000"
+    },
+    {
+      "slug": "pathfinder",
+      "name": "Pathfinder",
+      "kind": "venture",
+      "webUrl": "http://pathfinder-venture.local:3010"
+    }
+  ]
+}
