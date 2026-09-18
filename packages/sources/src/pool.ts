@@ -45,6 +45,13 @@ export const createSourcePools: CreateSourcePools = async (configs, options) => 
         statement_timeout: options?.statementTimeoutMillis,
       });
 
+      // pg emits 'error' on the Pool when an idle client dies in the background.
+      // An unhandled emitter error would crash the process, so this listener must
+      // never throw and must never log the connection string.
+      pool.on('error', (err) => {
+        console.error(`[sources] pool error for source "${config.slug}": ${(err as Error).message}`);
+      });
+
       const schema = await checkSourceSchema(config.slug, pool);
       assertSchemaUsable(schema);
 

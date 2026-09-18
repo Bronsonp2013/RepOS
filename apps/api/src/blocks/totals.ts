@@ -40,7 +40,7 @@ export async function totals(pool: Pool, ctx: BlockContext): Promise<SourceTotal
     `SELECT
        (SELECT COUNT(*)
           FROM accounts a
-          JOIN account_stages s ON s.id = a.account_stage_id
+          JOIN account_stages s ON s.id = a.account_stage_id AND s.deleted_at IS NULL
           WHERE a.deleted_at IS NULL AND s.key = 'active'
        ) AS active_accounts,
        (SELECT COUNT(*)

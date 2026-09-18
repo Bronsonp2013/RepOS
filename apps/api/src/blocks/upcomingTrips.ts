@@ -17,6 +17,7 @@
 import type { Pool } from 'pg';
 import type { MeetingTypeSummary, TripStopSummary, UpcomingTripRow } from '@repos/shared';
 import type { BlockContext } from './context';
+import { UPCOMING_TRIPS_LIMIT } from './context';
 import { formatInTimeZone } from 'date-fns-tz';
 import { localDateOnly, repLocalDateString } from './repLocal';
 
@@ -48,8 +49,9 @@ export async function upcomingTrips(pool: Pool, ctx: BlockContext): Promise<Upco
     `SELECT id AS trip_id, name, start_date, end_date, status
      FROM trips
      WHERE deleted_at IS NULL AND start_date >= $1::date
-     ORDER BY start_date ASC, id ASC`,
-    [today]
+     ORDER BY start_date ASC, id ASC
+     LIMIT $2`,
+    [today, UPCOMING_TRIPS_LIMIT]
   );
 
   if (trips.rows.length === 0) return [];
@@ -68,7 +70,7 @@ export async function upcomingTrips(pool: Pool, ctx: BlockContext): Promise<Upco
        mt.key AS meeting_type_key,
        mt.name AS meeting_type_name
      FROM trip_stops ts
-     JOIN accounts a ON a.id = ts.account_id
+     JOIN accounts a ON a.id = ts.account_id AND a.deleted_at IS NULL
      LEFT JOIN appointments ap ON ap.id = ts.appointment_id AND ap.deleted_at IS NULL
      LEFT JOIN meeting_types mt ON mt.id = ap.meeting_type_id AND mt.deleted_at IS NULL
      WHERE ts.trip_id = ANY($1::bigint[])

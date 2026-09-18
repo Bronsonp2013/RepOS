@@ -5,7 +5,7 @@
  * reports `ok` (docs/REPOS_V1.md §2.5, CLAUDE.md hard rules).
  *
  * Bump EXPECTED_MIGRATION and KNOWN_MIGRATIONS in the same commit that adapts
- * the block queries. STUB — the `sources` lane implements the check itself.
+ * the block queries.
  * Covered by schema.test.ts.
  */
 import type { Pool } from 'pg';
@@ -112,5 +112,11 @@ export async function checkSourceSchema(slug: string, pool: Pool): Promise<Schem
 export function assertSchemaUsable(result: SchemaCheckResult): void {
   if (result.status === 'behind') {
     throw new Error(result.message ?? `source "${result.slug}" is behind expected schema`);
+  }
+  if (result.status === 'unknown') {
+    throw new Error(
+      result.message ??
+        `source "${result.slug}" schema status is unknown: could not read schema_migrations`
+    );
   }
 }

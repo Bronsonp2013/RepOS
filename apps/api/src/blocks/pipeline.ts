@@ -43,6 +43,6 @@ export async function pipeline(pool: Pool, ctx: BlockContext): Promise<PipelineR
     label: row.label,
     sortOrder: row.sort_order,
     prospectCount: Number(row.prospect_count),
-    href: `${ctx.webUrl}/prospects?stage=${row.key}`,
+    href: `${ctx.webUrl}/prospects?stage=${encodeURIComponent(row.key)}`,
   }));
 }

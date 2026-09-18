@@ -18,3 +18,6 @@ export interface BlockContext {
 
 /** Rows returned per block, before the route assembles them. */
 export const NEEDS_VISIT_LIMIT = 8;
+
+/** Max trips returned by the upcomingTrips block. */
+export const UPCOMING_TRIPS_LIMIT = 10;
