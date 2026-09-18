@@ -9,17 +9,31 @@
 | Project root | `/home/user/RepOS` |
 | Size | `L` |
 | Agent budget | none set |
-| Git | repo at 6e68f30 on `claude/starting-project-k5ji80` |
+| Git | repo on `claude/starting-project-k5ji80` |
 | Attempt | 1 |
 | Concurrency | 4 CPUs → 2 workers at a time |
+| Local DB | PostgreSQL 16 + PostGIS on localhost:5432; fixture DBs `repos_test_lexington` (Graham seeded) and `repos_test_venture` (empty); role `repos_reader` SELECT-only; connection details in `test/fixtures/pathfinder/LOCAL_DB.md` (gitignored) |
 
 ## Frozen acceptance criteria
 
-Not yet frozen. Written after phase 1 from docs/REPOS_V1.md §7.
+Copied verbatim at the phase-1 gate. Not edited again by anyone but Bronson. This exact text is
+the sole input to the phase-7 acceptance worker. All commands run from `/home/user/RepOS`.
+
+| id | Criterion | Verification command |
+|---|---|---|
+| C1 | Toolchain is clean: TypeScript strict typecheck and ESLint pass across all workspaces. | `npm run typecheck && npm run lint` |
+| C2 | The full test suite passes, including integration tests against the two local fixture databases. | `npm test` |
+| C3 | Read-only by construction: an INSERT through a RepOS source pool fails with a read-only-transaction error, and an INSERT as `repos_reader` fails with permission denied. | `npm test -- readonly` |
+| C4 | Schema coupling is enforced: boot against a source missing `0029_sessions.sql` refuses to start naming the gap; a source with an extra migration row boots with a warning naming it; a matching source reports `ok`. | `npm test -- schema` |
+| C5 | `GET /api/sources` returns `lexington` and `pathfinder` with `schemaStatus: ok`, and `GET /api/health` reports per-source connectivity. | `npm test -- sources` |
+| C6 | `GET /api/today`: lexington `needsVisit` lists account 48 first (never visited); lexington `upcomingTrips` contains the trip anchored on appointment 1 rendered as 2026-07-08 2:00 PM America/Chicago; the venture source shows zero accounts and zero prospects; `pipeline` lists `prospect_stages` in `sort_order`; `coverage` is present. | `npm test -- today` |
+| C7 | Degradation: with the venture source pointed at a closed port, `GET /api/today` still returns HTTP 200 with lexington data and the venture entry carries an error state. | `npm test -- degrade` |
+| C8 | The web app builds, and a Playwright test against the running API and web renders the Today page with both venture sections, the "Graham Interiors" row, and an "Open in Pathfinder" link whose href is `{webUrl}/accounts/48`. | `npm run build -w apps/web && npm run e2e` |
+| C9 | No writable credential: `sources.json` contains no connection string; the pool factory appends `default_transaction_read_only=on` to every connection; `.env.example` documents `REPOS_SOURCE_<SLUG>_DATABASE_URL`. | `npm test -- credentials` |
 
 ## Current phase
 
-`1 — Recon and scope`
+`2 — Architecture and contracts`
 
 ## Lane map
 
@@ -29,18 +43,19 @@ Not yet produced.
 
 | task_id | label | model | attempt | verdict |
 |---|---|---|---|---|
-| scout-env | `recon:scout-env` | sonnet | 1 | running |
+| scout-env | `recon:scout-env` | sonnet | 1 | pass (3 verifications exit 0) |
+| arch | `arch:arch` | opus | 1 | running |
 
 ## Open decisions
 
 | id | Question | Options | Status |
 |---|---|---|---|
-| D0 | Bronson said "proceed"; treated as run-unattended. Phase 1 and 2 gates become notifications, not questions. | — | assumed |
+| D0 | Bronson said "proceed"; treated as run-unattended. Phase 1 and 2 gates become notifications. | — | assumed |
 
 ## Degradations
 
-- Declared isolation exception: the phase-1 scout may READ `/home/user/reptech-pathfinder`
-  (Pathfinder, sibling project, commit 028af48) solely to copy its migration SQL and lint
-  configs into RepOS as fixtures. No worker ever writes there. No later worker reads it.
-- Sandbox has no Docker. Local PostgreSQL 16 binaries exist; PostGIS presence unknown until
-  the scout reports.
+- Declared isolation exception (phase 1 only, closed): the scout read `/home/user/reptech-pathfinder`
+  (commit 028af48) to vendor migrations and lint configs into `test/fixtures/pathfinder/`. No later
+  worker reads the sibling repo.
+- No Docker in the sandbox. Local PostgreSQL 16 is used instead; PostGIS installed via apt.
+- Gate commits are run by the orchestrator (a stop hook requires committed state each turn).

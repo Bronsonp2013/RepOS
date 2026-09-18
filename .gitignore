@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 sources.local.json
+test/fixtures/pathfinder/LOCAL_DB.md
 
 # Node
 node_modules/
