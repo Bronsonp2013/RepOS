@@ -49,10 +49,10 @@ server loads `.env` on its own; `apps/api` loads it explicitly in
 
 ## Status
 
-V1 built; remediation applied; awaiting acceptance. `npm run typecheck`,
-`npm run lint`, `npm test`, `npm run build -w apps/web`, and `npm run e2e`
-all pass. `npm run dev` starts the API and web app together against `.env`.
-Deploy surface is drafted (`Dockerfile`, `docker-compose.yml`,
-`Caddyfile.example`, `docs/DEPLOY.md`); the container image has not been
-built in this environment (no Docker daemon in the sandbox). Next: review
-against the acceptance criteria in `.orchestrator/state.md`.
+V1 was built and accepted on 2026-09-18 against the nine acceptance criteria
+in `docs/REPOS_V1.md` §7, all passing: typecheck, lint, 44 tests, web build,
+and Playwright e2e. The API and web app run locally against the fixture
+databases described in `docs/DEPLOY.md`. What remains before real use: create
+the `repos_reader` role on the Lexington database, stand up the second
+Pathfinder instance, set real `webUrl` values in `sources.json`, and deploy
+per `docs/DEPLOY.md`.

@@ -1,6 +1,6 @@
 # Orchestration state — RepOS V1
 
-**Rewrite this file at every phase boundary. Never append.**
+**Run closed 2026-09-18. Accepted.** Rewritten at close; history is in the gate commits.
 
 ## Run
 
@@ -9,15 +9,13 @@
 | Project root | `/home/user/RepOS` |
 | Size | `L` |
 | Agent budget | none set |
-| Git | repo on `claude/starting-project-k5ji80` |
+| Git | branch `claude/starting-project-k5ji80` |
 | Attempt | 1 |
-| Concurrency | 4 CPUs → 2 workers at a time |
-| Local DB | PostgreSQL 16 + PostGIS on localhost:5432; fixture DBs `repos_test_lexington` (Graham seeded) and `repos_test_venture` (empty); role `repos_reader` SELECT-only; connection details in `test/fixtures/pathfinder/LOCAL_DB.md` (gitignored) |
+| Workers dispatched | 24 (1 scout, 1 architect, 1 contract reviewer, 1 contract fix, 5 lanes, 2 integrators, 4 reviewers incl. one retry, 7 fixers, 2 acceptance runs) |
 
 ## Frozen acceptance criteria
 
-Copied verbatim at the phase-1 gate. Not edited again by anyone but Bronson. This exact text is
-the sole input to the phase-7 acceptance worker. All commands run from `/home/user/RepOS`.
+All commands run from `/home/user/RepOS`. Final acceptance (attempt 2): every criterion met, exit 0.
 
 | id | Criterion | Verification command |
 |---|---|---|
@@ -33,61 +31,62 @@ the sole input to the phase-7 acceptance worker. All commands run from `/home/us
 
 ## Current phase
 
-`6 — Remediation round 2 of 2 (C7 policy fix), then 7 — Acceptance re-run`
+`7 — Acceptance: accepted: true (attempt 2). Run closed.`
 
 ## Lane map
 
-Phase-2 output (commit 4cae02f). Shared files belong to no lane: package.json files,
-package-lock.json, index.ts barrels, apps/api/src/server.ts, root configs, sources.json, .env*,
-test/setup/**.
+All lanes done. Shared files were integrator-only.
 
-| id | owns | may_read | status |
+| id | owns | status |
+|---|---|---|
+| sources | `packages/sources/src/**` (except index.ts) | done |
+| blocks | `apps/api/src/blocks/**` | done |
+| routes | `apps/api/src/{routes,services}/**`, `index.ts`, api tests | done |
+| web | `apps/web/src/**`, web configs, `e2e/**` | done |
+| deploy-docs | `Dockerfile`, `docker-compose.yml`, `Caddyfile.example`, `docs/DEPLOY.md`, `README.md` | done |
+
+## Tasks (final verdicts)
+
+| task_id | model | attempt | verdict |
 |---|---|---|---|
-| sources | `packages/sources/src/{types,config,pool,schema}.ts`, `packages/sources/src/{readonly,schema,credentials}.test.ts` | shared, sources index, fixtures, sources.json | done |
-| blocks | `apps/api/src/blocks/**` incl. `today-blocks.test.ts` | shared, sources, server.ts, services, fixtures | done |
-| routes | `apps/api/src/routes/**`, `apps/api/src/services/**`, `apps/api/src/index.ts`, `apps/api/src/{sources,degrade,today}.test.ts` | shared, sources, blocks, server.ts | done |
-| web | `apps/web/src/**`, `apps/web/{index.html,vite.config.ts,tailwind.config.js,postcss.config.js}`, `e2e/**` | shared, playwright.config.ts | done |
-| deploy-docs | `Dockerfile`, `docker-compose.yml`, `Caddyfile.example`, `docs/DEPLOY.md`, `README.md` | spec, package.json, .env.example | done |
+| scout-env | sonnet | 1 | pass |
+| arch | opus | 1 | pass |
+| review-contracts | opus | 1 | fail → 3 blockers + 5 majors triaged into contract-fix and staged lanes |
+| contract-fix | sonnet | 1 | pass |
+| lane-sources, lane-blocks, lane-routes, lane-deploy-docs | sonnet | 1 | pass |
+| lane-web | sonnet | 1 | partial (e2e pre-routes), resolved at integration |
+| integrate | sonnet | 1 | pass |
+| review-correctness, review-criteria | opus | 1 | fail / pass_with_fixes |
+| review-security | opus | 2 | fail (attempt 1 died on schema length) |
+| fix-sources, fix-blocks, fix-api, fix-tests, fix-web, fix-deploy | sonnet | 1 | pass |
+| integrate-2 | sonnet | 1 | pass on exit codes; re-scoped C7 test, caught at acceptance |
+| accept | opus | 1 | rejected on C7 |
+| fix-unreachable | sonnet | 1 | pass |
+| accept | opus | 2 | **accepted** |
 
-## Tasks
+## Decisions
 
-| task_id | label | model | attempt | verdict |
-|---|---|---|---|---|
-| scout-env | `recon:scout-env` | sonnet | 1 | pass (3 verifications exit 0) |
-| arch | `arch:arch` | opus | 1 | pass (typecheck 0, lint 0, web build 0; tests fail 'not implemented' by design) |
-| review-contracts | `review:contracts` | opus | 1 | fail: 3 blockers, 5 majors, 2 minors (all triaged into contract-fix and lane briefs) |
-| contract-fix | `fix:contracts` | sonnet | 1 | pass (3 exits 0, commit 4a7252b) |
-| lane-sources | `lane:sources` | sonnet | 1 | pass (5 exits 0) |
-| lane-blocks | `lane:blocks` | sonnet | 1 | pass (3 exits 0) |
-| lane-routes | `lane:routes` | sonnet | 1 | pass (3 exits 0; full suite 35 tests) |
-| lane-web | `lane:web` | sonnet | 1 | partial: all green except e2e, which ran before routes existed; integrator re-runs |
-| lane-deploy-docs | `lane:deploy-docs` | sonnet | 1 | pass (2 exits 0; image not built, no Docker) |
-| integrate | `integrate` | sonnet | 1 | pass (6 exits 0, commit 15eb575) |
-| review-correctness | `review:correctness` | opus | 1 | fail: 2 blockers (web error state unreachable; no pool error listener), 5 majors, 3 minors |
-| review-criteria | `review:criteria` | opus | 1 | pass_with_fixes: all C1-C9 commands exit 0; 5 majors on vacuous tests and an unredacted 500, 5 minors |
-| review-security | `review:security` | opus | 2 (attempt 1 died on schema length) | fail: 2 blockers (CORS *, no .dockerignore), 3 majors (500 handler, listen 0.0.0.0, compose ports), 4 minors |
-| fix-sources / fix-blocks / fix-tests / fix-web / fix-deploy | `fix:*` | sonnet | 1 | pass (all verifications exit 0) |
-| fix-api | `fix:api` | sonnet | 1 | pass except degrade.test.ts, which the integrator then re-scoped |
-| integrate-2 | `integrate-2` | sonnet | 1 | pass on exit codes (commit 55e2a98) but rewrote degrade.test.ts to a post-boot pool kill, which is not C7's scenario |
-| accept | `accept` | opus | 1 | rejected: C1-C6, C8, C9 met with real evidence; C7 unmet because an unreachable source is fatal at boot |
-| fix-unreachable | `fix:unreachable` | sonnet | 1 | running |
-| accept | `accept` | opus | 2 | queued |
+| id | Decision |
+|---|---|
+| D0 | "Proceed" treated as run-unattended; gates were notifications. |
+| D1 | Node 22; placeholder webUrls stay config; API runs under tsx; Docker image unverified. |
+| D2 | Fixed clock via BlockContext in tests; totals block added; lane commands path-exact; criteria unchanged. |
+| D3 | All 28 review findings in scope, six file-disjoint groups. |
+| D4 | Unreachable-at-boot sources degrade; behind/unknown are fatal. Spec decision 5 amended. |
+| D5 | Accepted on attempt 2 with all nine criteria met. |
 
-## Open decisions
+## Residual risk (stated for the hand-off)
 
-| id | Question | Options | Status |
-|---|---|---|---|
-| D1 | Architect asks: Node 22 vs Pathfinder's 20; placeholder webUrls; API runs under tsx in prod; no Docker to verify image. | Resolved by orchestrator: 22, placeholders stay config, tsx matches Pathfinder, image unverified is a recorded degradation. | resolved |
-| D2 | Review blockers: fixture trip date past; totals block missing; test filter collision. | Fixed clock via BlockContext in tests; totals block added to blocks lane; lane verification commands made path-exact; criteria unchanged. | resolved |
-| D3 | Finding triage (decision 3): all 28 findings from three reviewers are in scope; none deferred. | Six file-disjoint fix groups. | resolved |
-| D4 | Policy: a source that is unreachable at boot must degrade, not fail boot; only behind/unknown (reachable, no readable migrations) is fatal. Spec decision 5 amended to say so. | Orchestrator decided; C7 unchanged. | resolved |
-| D0 | Bronson said "proceed"; treated as run-unattended. Phase 1 and 2 gates become notifications. | — | assumed |
+- The orchestrator never read the source. Quality rests on named verification commands, three adversarial reviewers, and a fresh acceptance worker that ran every command and hand-curled the API.
+- The Graham fixture is dated 2026-07-08; under the live clock its trip is past. C6 is proven under a fixed clock (real HTTP, real DB). Fixtures drift with time.
+- Docker image never built (no daemon in the sandbox). Dockerfile verified by read-through only.
+- Playwright reuses an existing API server off-CI.
+- `sources.json` webUrls are placeholders; real tailnet hostnames needed before deploy.
+- Not done here: creating `repos_reader` on the real Lexington database, standing up the second Pathfinder instance, NAS deploy.
 
 ## Degradations
 
-- Declared isolation exception (phase 1 only, closed): the scout read `/home/user/reptech-pathfinder`
-  (commit 028af48) to vendor migrations and lint configs into `test/fixtures/pathfinder/`. No later
-  worker reads the sibling repo.
-- No Docker in the sandbox. Local PostgreSQL 16 is used instead; PostGIS installed via apt.
-- Lanes are staged, not one fan-out, because blocks and routes depend on sources and web's e2e depends on routes.
-- Gate commits are run by the orchestrator (a stop hook requires committed state each turn).
+- Phase 1 scout read the sibling Pathfinder checkout (read-only) to vendor migrations; no later worker did.
+- No Docker; local PostgreSQL 16 + PostGIS used.
+- Lanes staged in three dependency-ordered waves rather than one fan-out.
+- Gate commits run by the orchestrator (stop hook requirement).
