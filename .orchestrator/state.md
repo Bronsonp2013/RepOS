@@ -1,6 +1,6 @@
 # Orchestration state — RepOS V1
 
-**Run 2 opened 2026-09-18: full review and remediation** (plan: /root/.claude/plans/use-engineering-skills-to-giggly-pearl.md). Run 1 accepted at f706da7.
+**Run 1 accepted at f706da7. Run 2 (full review and remediation) accepted 2026-09-18 at 40173dd.** Both closed.
 
 ## Run
 
@@ -31,7 +31,9 @@ All commands run from `/home/user/RepOS`. Final acceptance (attempt 2): every cr
 
 ## Current phase
 
-`Run 2, F — fix lanes (L3+L5, then L1+L2, then L4), then INT integrator, then A acceptance`. R1: A pass_with_fixes/9, B fail/14, C fail/12, D fail/14, E fail/14. R2: 63 raw → 40 accepted (L1 3, L2 9, L3 4, L4 10, L5 9, INT 5), 5 refuted, 5 deferred; see fix2-verified.json.
+`Run 2 closed: accepted on attempt 2.` R1: five Opus lenses (A pass_with_fixes/9, B fail/14, C fail/12, D fail/14, E fail/14) → 63 raw findings. R2 verifier: 40 accepted, 5 refuted, 5 deferred (`fix2-verified.json`). F: five Sonnet lanes in three stages + integrator, 37/40 closed, C8 broken by the Chromium-path fix. Round 2: one fixer restored a fallback chain; acceptance attempt 2: C1–C9 all exit 0 with no env override, 40/40 closed or agreed-deferred. Suite grew from 44 to 63 tests.
+
+Run 2 residual risk: pool max is configurable but defaults to 5; timezone and meeting-type read failures still fall back to defaults (logged at error) because the shared contract has no null field; Docker never ran here; contrast verified by class name, not computed style; Pathfinder's period-key writer not compared byte-for-byte (isolation rule).
 
 ## Lane map
 
