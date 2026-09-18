@@ -1,0 +1,26 @@
+# RepOS deploy compose file. One service: the API. RepOS has no database of
+# its own — it only reads other ventures' Pathfinder databases over the
+# network, so there is no `db` service here (contrast a Pathfinder compose
+# file, which owns its Postgres). Source credentials come from `.env`
+# (REPOS_SOURCE_<SLUG>_DATABASE_URL, see .env.example and docs/DEPLOY.md).
+#
+# The web bundle is built into the image at apps/web/dist. In the
+# recommended setup, Caddy serves that directory directly from the host (see
+# Caddyfile.example) and this compose file runs the API only. If you would
+# rather Caddy reverse-proxy a `vite preview` server instead of serving
+# static files, change `command` below to
+# `["npm", "run", "preview", "-w", "apps/web"]` and add `web:5173` to
+# Caddyfile.example's reverse_proxy line — see the comments there.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: repos-api:local
+    command: ['npm', 'run', 'start', '-w', 'apps/api']
+    env_file:
+      - .env
+    ports:
+      - '${REPOS_API_PORT:-3200}:3200'
+    restart: unless-stopped

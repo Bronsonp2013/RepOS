@@ -53,20 +53,64 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
 
 /** Compare an applied-migration list to KNOWN_MIGRATIONS. Pure; no I/O. */
 export function compareMigrations(slug: string, applied: string[]): SchemaCheckResult {
-  void slug;
-  void applied;
-  throw new Error('not implemented: compareMigrations');
+  const appliedSet = new Set(applied);
+  const knownSet = new Set(KNOWN_MIGRATIONS);
+
+  const missingMigrations = KNOWN_MIGRATIONS.filter((m) => !appliedSet.has(m));
+  const extraMigrations = applied.filter((m) => !knownSet.has(m));
+
+  if (missingMigrations.length > 0) {
+    return {
+      slug,
+      status: 'behind',
+      expectedMigration: EXPECTED_MIGRATION,
+      extraMigrations,
+      missingMigrations,
+      message: `source "${slug}" is behind: missing ${missingMigrations.join(', ')}`,
+    };
+  }
+
+  if (extraMigrations.length > 0) {
+    return {
+      slug,
+      status: 'ahead',
+      expectedMigration: EXPECTED_MIGRATION,
+      extraMigrations,
+      missingMigrations,
+      message: `source "${slug}" is ahead: extra migrations ${extraMigrations.join(', ')}`,
+    };
+  }
+
+  return {
+    slug,
+    status: 'ok',
+    expectedMigration: EXPECTED_MIGRATION,
+    extraMigrations,
+    missingMigrations,
+  };
 }
 
 /** Read `schema_migrations` from a source and classify it. */
 export async function checkSourceSchema(slug: string, pool: Pool): Promise<SchemaCheckResult> {
-  void slug;
-  void pool;
-  throw new Error('not implemented: checkSourceSchema');
+  try {
+    const result = await pool.query<{ filename: string }>('SELECT filename FROM schema_migrations ORDER BY filename');
+    const applied = result.rows.map((row) => row.filename);
+    return compareMigrations(slug, applied);
+  } catch (err) {
+    return {
+      slug,
+      status: 'unknown',
+      expectedMigration: EXPECTED_MIGRATION,
+      extraMigrations: [],
+      missingMigrations: [],
+      message: `source "${slug}" schema check failed: ${(err as Error).message}`,
+    };
+  }
 }
 
 /** Throws when a source is `behind`, with a message naming the missing migrations. */
 export function assertSchemaUsable(result: SchemaCheckResult): void {
-  void result;
-  throw new Error('not implemented: assertSchemaUsable');
+  if (result.status === 'behind') {
+    throw new Error(result.message ?? `source "${result.slug}" is behind expected schema`);
+  }
 }

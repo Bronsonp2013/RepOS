@@ -8,16 +8,42 @@
  *      itself has SELECT only, independent of any session setting.
  * Selected by: npm test -- readonly
  */
-import { describe, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
+import { Client } from 'pg';
+import { loadSourceConfigs } from './config';
+import { createSourcePools } from './pool';
+import type { SourcePoolFactory } from './types';
+
+let factory: SourcePoolFactory | undefined;
+
+afterAll(async () => {
+  await factory?.close();
+});
 
 describe('read-only enforcement (C3)', () => {
-  it('rejects an INSERT through a RepOS source pool with a read-only transaction error', () => {
-    throw new Error(
-      'not implemented: assert 25006 read_only_sql_transaction from a pool built by createSourcePools'
-    );
+  it('rejects an INSERT through a RepOS source pool with a read-only transaction error', async () => {
+    const configs = await loadSourceConfigs();
+    factory = await createSourcePools(configs);
+    const source = factory.get('lexington');
+    expect(source).toBeDefined();
+
+    await expect(
+      source!.pool.query("INSERT INTO accounts (name, account_type) VALUES ('x', 'retail')")
+    ).rejects.toMatchObject({ code: '25006' });
   });
 
-  it('rejects an INSERT as repos_reader with permission denied', () => {
-    throw new Error('not implemented: assert 42501 insufficient_privilege for role repos_reader');
+  it('rejects an INSERT as repos_reader with permission denied', async () => {
+    const url = process.env.REPOS_SOURCE_LEXINGTON_DATABASE_URL;
+    expect(url).toBeTruthy();
+
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    try {
+      await expect(
+        client.query("INSERT INTO accounts (name, account_type) VALUES ('x', 'retail')")
+      ).rejects.toMatchObject({ code: '42501' });
+    } finally {
+      await client.end();
+    }
   });
 });

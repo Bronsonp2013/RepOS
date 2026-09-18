@@ -1,7 +1,6 @@
 /**
  * The Today page: a cross-venture header, then one section per source
- * (docs/REPOS_V1.md §3). STUB — the `web` lane implements it.
- * Covered by e2e/today.spec.ts.
+ * (docs/REPOS_V1.md §3). Covered by e2e/today.spec.ts.
  */
 import { useQuery } from '@tanstack/react-query';
 import type { TodayPayload } from '@repos/shared';
@@ -15,11 +14,24 @@ export default function TodayPage() {
     queryFn: fetchToday,
   });
 
-  if (isPending) return <main data-testid="today-loading">Loading…</main>;
-  if (error) return <main data-testid="today-error">{String(error)}</main>;
+  if (isPending || !data) {
+    return (
+      <main data-testid="today-loading" className="p-4 text-sm text-slate-500">
+        Loading…
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main data-testid="today-error" className="p-4 text-sm text-red-700">
+        {error instanceof Error ? error.message : String(error)}
+      </main>
+    );
+  }
 
   return (
-    <main data-testid="today-page">
+    <main data-testid="today-page" className="mx-auto max-w-4xl">
       <TotalsHeader totals={data.totals} />
       {data.sources.map((source) => (
         <SourceSection key={source.slug} source={source} />

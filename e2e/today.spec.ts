@@ -4,18 +4,28 @@
  * playwright.config.ts using .env.test.
  * Run by: npm run e2e
  */
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+
+const LEXINGTON_WEB_URL = 'http://pathfinder.local:3000';
 
 test.describe('Today page (C8)', () => {
   test('renders both venture sections', async ({ page }) => {
-    void page;
-    throw new Error('not implemented: assert source-lexington and source-pathfinder sections');
+    await page.goto('/');
+    await expect(page.getByTestId('source-lexington')).toBeVisible();
+    await expect(page.getByTestId('source-pathfinder')).toBeVisible();
   });
 
   test('shows the Graham Interiors row with an Open in Pathfinder link to /accounts/48', async ({
     page,
   }) => {
-    void page;
-    throw new Error('not implemented: assert the link href equals `${webUrl}/accounts/48`');
+    await page.goto('/');
+    const row = page.getByTestId('source-lexington').getByText('Graham Interiors');
+    await expect(row).toBeVisible();
+
+    const link = page
+      .getByTestId('source-lexington')
+      .getByRole('link', { name: 'Open in Pathfinder' })
+      .first();
+    await expect(link).toHaveAttribute('href', `${LEXINGTON_WEB_URL}/accounts/48`);
   });
 });

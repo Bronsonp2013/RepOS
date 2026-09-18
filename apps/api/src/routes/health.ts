@@ -1,4 +1,4 @@
-/** Router for `GET /api/health`. STUB — the `routes` lane implements the handler. */
+/** Router for `GET /api/health`.  */
 import { Router } from 'express';
 import type { SourcePoolFactory } from '@repos/sources';
 import { buildHealthReport } from '../services/health';

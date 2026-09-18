@@ -1,0 +1,33 @@
+# Example Caddyfile for RepOS on the tailnet (docs/REPOS_V1.md §2 decision 6:
+# private network only in V1, never a public URL). Copy to Caddyfile on the
+# NAS, fill in the real tailnet hostname, and point `root` at the built web
+# bundle produced by `npm run build -w apps/web` (apps/web/dist), or swap the
+# `file_server` block below for a reverse_proxy to the `web` service if you
+# run the image's `vite preview` mode instead (see docker-compose.yml).
+
+repos.<your-tailnet-name>.ts.net {
+    # Static web bundle.
+    root * /path/to/repos/apps/web/dist
+    file_server
+
+    # RepOS API. Matches REPOS_API_PORT in .env (default 3200).
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3200
+    }
+}
+
+# --- Per-venture Pathfinder instances --------------------------------------
+#
+# Each Pathfinder instance RepOS reads from (docs/REPOS_V1.md §5) gets its
+# own site block here too, on its own tailnet hostname and port, exactly as
+# it is deployed today. RepOS only deep-links to these — `{web}/accounts/{id}`
+# etc, built from each source's `webUrl` in sources.json — it never proxies
+# or serves their content. Add one block per source, matching sources.json:
+#
+# pathfinder.<your-tailnet-name>.ts.net {
+#     reverse_proxy 127.0.0.1:3000
+# }
+#
+# pathfinder-venture.<your-tailnet-name>.ts.net {
+#     reverse_proxy 127.0.0.1:3010
+# }

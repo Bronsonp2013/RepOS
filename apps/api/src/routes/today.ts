@@ -1,13 +1,13 @@
-/** Router for `GET /api/today`. STUB — the `routes` lane implements the handler. */
+/** Router for `GET /api/today`. */
 import { Router } from 'express';
 import type { SourcePoolFactory } from '@repos/sources';
-import { buildToday } from '../services/today';
+import { buildToday, resolveNow } from '../services/today';
 
 export function todayRouter(factory: SourcePoolFactory): Router {
   const router = Router();
   router.get('/', async (_req, res, next) => {
     try {
-      res.json(await buildToday(factory, new Date()));
+      res.json(await buildToday(factory, resolveNow()));
     } catch (err) {
       next(err);
     }
